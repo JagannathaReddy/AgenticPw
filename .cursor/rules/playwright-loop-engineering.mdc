@@ -1,0 +1,15 @@
+---
+description: Loop Engineering rules for Playwright test agents — always verify with npx playwright test before claiming done
+globs:
+  - specs/**
+  - tests/**
+  - docs/LOOP-ENGINEERING.md
+---
+
+Read `docs/LOOP-ENGINEERING.md` before plan, generate, or heal work. Doc map: `docs/README.md`.
+
+Master loop: Plan → Generate → Run → Heal → Verify. Never treat a single prompt as complete without running `npx playwright test`.
+
+Use `/goal` and `/loop` templates from LOOP-ENGINEERING.md. Update `.loop/run-log.json` each iteration.
+
+Healer max 3 attempts per test. Master loop max 2 iterations per feature.

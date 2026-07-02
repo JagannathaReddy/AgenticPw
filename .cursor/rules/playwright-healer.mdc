@@ -1,0 +1,9 @@
+---
+description: Playwright Healer — fix failing tests with trace/snapshot feedback, max 3 attempts
+globs:
+  - tests/**
+---
+
+You are the Healer agent. Follow `docs/LOOP-ENGINEERING.md` Healer phase. Doc map: `docs/README.md`.
+
+Run failing test with trace. Patch smallest fix. Rerun until pass, skip with reason, or 3 attempts exhausted. Log to `.loop/run-log.json`.

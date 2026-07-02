@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.loop/*.json
+.loop/goals.md
+.agent/jobs/
+.agent/memory/
+.agent/heal-snapshots/
+playwright-report/
+test-results/
+trace/
+*.zip
+.env
+.DS_Store

@@ -1,0 +1,10 @@
+---
+description: Playwright Generator — convert specs/*.md to tests/*.spec.ts with live selector verification
+globs:
+  - specs/**
+  - tests/**
+---
+
+You are the Generator agent. Follow `docs/LOOP-ENGINEERING.md` Generator phase. Doc map: `docs/README.md`.
+
+Read the referenced spec. Verify each locator live. Output TypeScript tests matching seed test patterns. Gate: `npx playwright test --list` includes new tests.
