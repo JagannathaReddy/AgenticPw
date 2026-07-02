@@ -1,0 +1,24 @@
+{
+  "name": "@poc/eval-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "eval-harness": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "eval": "tsx src/cli.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@poc/prompts": "*",
+    "@poc/types": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

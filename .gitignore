@@ -1,13 +1,22 @@
 node_modules/
 dist/
+
+# Local artifacts + reports
+local-artifacts/
+.eval-report.json
+playwright-report/
+test-results/
+trace/
+*.zip
+
+# Legacy POC state (still in packages/agent-server)
 .loop/*.json
 .loop/goals.md
 .agent/jobs/
 .agent/memory/
 .agent/heal-snapshots/
-playwright-report/
-test-results/
-trace/
-*.zip
+
+# Env + OS
 .env
+.env.local
 .DS_Store

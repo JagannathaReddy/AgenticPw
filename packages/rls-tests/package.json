@@ -1,0 +1,23 @@
+{
+  "name": "@poc/rls-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --loader tsx dist/*.test.js",
+    "test:src": "node --test --loader tsx src/*.test.ts",
+    "db:reset": "bash scripts/reset-db.sh",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@poc/types": "*",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

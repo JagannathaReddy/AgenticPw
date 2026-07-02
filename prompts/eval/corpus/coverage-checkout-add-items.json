@@ -1,0 +1,38 @@
+{
+  "id": "coverage.checkout-add-items.v1",
+  "role": "coverage",
+  "tags": ["coverage", "checkout", "positive-path"],
+  "difficulty": "medium",
+  "input": {
+    "goal": "As a shopper, I can add 3 items to my cart and see the cart total match the sum of the item prices",
+    "targetUrl": "https://demo-fixture.invalid/products",
+    "expectedOutcomes": [
+      "cart badge shows 3",
+      "cart total equals sum of item prices"
+    ],
+    "repoFixtureId": "shop-repo-01"
+  },
+  "expected": {
+    "testFile": {
+      "path": "tests/checkout-add-3-items.spec.ts",
+      "mustContain": [
+        "cartBadge",
+        "toHaveText\\('3'\\)",
+        "cartTotal"
+      ],
+      "mustNotContain": [
+        "waitForTimeout",
+        "page.click\\('body'\\)"
+      ],
+      "mustAssertOutcomes": true,
+      "styleReference": "fixtures/shop-repo-01/tests/cart/remove-item.spec.ts"
+    }
+  },
+  "metrics": {
+    "astSimilarityTarget": 0.7,
+    "styleConformanceTarget": 0.85,
+    "outcomeCoverageTarget": 1.0,
+    "costMaxUSD": 3.0,
+    "latencyMaxMs": 120000
+  }
+}

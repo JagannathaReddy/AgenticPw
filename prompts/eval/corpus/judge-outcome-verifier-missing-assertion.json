@@ -1,0 +1,24 @@
+{
+  "id": "judge.outcome-verifier.missing-assertion.v1",
+  "role": "judge",
+  "tags": ["judge", "outcome", "negative-path"],
+  "difficulty": "medium",
+  "input": {
+    "extraVariables": {
+      "expected_outcomes": "- cart badge shows 3\n- cart total equals sum of item prices",
+      "test_source": "import { test, expect } from '@playwright/test';\ntest('cart', async ({ page }) => {\n  await page.goto('/');\n  await expect(page.getByTestId('cart-badge')).toHaveText('3');\n  // No assertion for cart total\n  await expect(page.locator('body')).toBeVisible();\n});",
+      "page_object_source": ""
+    }
+  },
+  "expected": {
+    "judgeVerdict": {
+      "allCovered": false,
+      "minConfidence": 0.8
+    }
+  },
+  "metrics": {
+    "outcomeCoverageTarget": 0.5,
+    "costMaxUSD": 0.05,
+    "latencyMaxMs": 10000
+  }
+}

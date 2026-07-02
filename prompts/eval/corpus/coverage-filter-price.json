@@ -1,0 +1,34 @@
+{
+  "id": "coverage.filter-price.v1",
+  "role": "coverage",
+  "tags": ["coverage", "listing", "filter"],
+  "difficulty": "easy",
+  "input": {
+    "goal": "As a user I can filter products by price range 10-50 and see only matching products",
+    "targetUrl": "https://demo-fixture.invalid/products",
+    "expectedOutcomes": [
+      "filter shows range 10 to 50",
+      "every visible product price is between 10 and 50"
+    ],
+    "repoFixtureId": "shop-repo-01"
+  },
+  "expected": {
+    "testFile": {
+      "path": "tests/filter-by-price.spec.ts",
+      "mustContain": [
+        "priceRange",
+        "getByRole\\('slider'"
+      ],
+      "mustNotContain": ["waitForTimeout"],
+      "mustAssertOutcomes": true,
+      "styleReference": "fixtures/shop-repo-01/tests/filter/by-category.spec.ts"
+    }
+  },
+  "metrics": {
+    "astSimilarityTarget": 0.75,
+    "styleConformanceTarget": 0.9,
+    "outcomeCoverageTarget": 1.0,
+    "costMaxUSD": 2.0,
+    "latencyMaxMs": 90000
+  }
+}

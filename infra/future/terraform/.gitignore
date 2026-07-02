@@ -1,0 +1,23 @@
+# Terraform state (never commit)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Provider plugins + module cache
+.terraform/
+.terraform.lock.hcl
+
+# Local plan output
+*.tfplan
+*.tfplan.*
+
+# CLI logs
+crash.log
+crash.*.log
+
+# Local sensitive tfvars (should use terraform.tfvars only for non-secret env config)
+*.auto.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

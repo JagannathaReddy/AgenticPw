@@ -1,29 +1,34 @@
 {
-  "name": "playwright-specialist-poc",
+  "name": "test-agent-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Playwright Specialist Agent platform with Loop Engineering",
+  "description": "Agentic QA platform — Coverage MVP running locally",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "test": "playwright test",
-    "test:ui": "playwright test --ui",
-    "test:debug": "playwright test --debug",
-    "test:list": "playwright test --list",
-    "report": "playwright show-report",
+    "dev": "concurrently -n api,worker -c cyan,magenta \"npm:dev -w @poc/api\" \"npm:dev -w @poc/worker\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -b packages/ops-types packages/ops-prompts apps/api apps/worker",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d postgres && bash scripts/wait-for-postgres.sh && bash scripts/dev-migrate.sh",
+    "db:migrate": "bash scripts/dev-migrate.sh",
+    "db:seed": "tsx scripts/seed-dev-tenant.ts",
+    "dev:up": "bash scripts/dev-up.sh",
+    "test:rls": "npm run test -w @poc/rls-tests",
+    "test:playwright": "playwright test",
+    "eval": "npm run eval -w @poc/eval-harness",
+    "prompts:validate": "tsx -e \"import('@poc/prompts').then(m => m.validateAllPrompts().then(ms => console.log('✓', ms.length, 'prompts valid')))\"",
     "loop": "bash scripts/loop.sh",
     "loop:verify": "playwright test && node scripts/record-loop-state.js pass",
-    "loop:state": "bash scripts/loop-state.sh show",
-    "agent:build": "npm run build --workspace=@poc/agent-server",
-    "agent:dev": "tsx packages/agent-server/src/index.ts",
-    "agent:start": "node packages/agent-server/dist/index.js",
-    "agent:submit": "bash scripts/agent-cli.sh submit"
+    "loop:state": "bash scripts/loop-state.sh show"
   },
   "devDependencies": {
-    "@playwright/cli": "^0.1.0",
     "@playwright/test": "^1.52.0",
     "@types/node": "^22.0.0",
+    "concurrently": "^9.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
