@@ -336,11 +336,49 @@ function parseInit(argv: string[]): InitArgs {
   return { localPath, name };
 }
 
+/**
+ * Detect --name arguments that look like filesystem paths — a common
+ * confusion (issue #9) where a user typed:
+ *     test-agent init . --name C:\Users\dev\CodeRepo\Foo
+ * intending the path there. Bash then eats the backslashes and the CLI
+ * would happily persist "C:UsersdevCodeRepoFoo" as the display label.
+ */
+function looksLikePath(name: string): boolean {
+  return (
+    name.includes('/') ||
+    name.includes('\\') ||
+    /^[A-Za-z]:/.test(name) ||           // Windows drive letter
+    /^[A-Za-z]:$/.test(name.slice(0, 2)) // even after bash ate the backslashes
+  );
+}
+
+/** Slugify a filesystem path segment into a clean display label. */
+function slugFromPath(pathValue: string): string {
+  const base = pathValue.split(/[/\\]/).pop() ?? pathValue;
+  return base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'repo';
+}
+
 async function initCommand(argv: string[]): Promise<void> {
   const args = parseInit(argv);
   const path = await import('node:path');
   const absPath = path.resolve(args.localPath);
-  const name = args.name ?? path.basename(absPath);
+
+  if (args.name && looksLikePath(args.name)) {
+    process.stderr.write(
+      `\`--name\` is a short display label, not a path.\n` +
+        `You passed --name ${JSON.stringify(args.name)} which looks like a filesystem path.\n\n` +
+        `Did you mean:\n` +
+        `  test-agent init <path> --name <label>\n\n` +
+        `Refusing to register a repo with a path-like label. Rerun with a short label\n` +
+        `(e.g. --name shop-tests) or omit --name to auto-derive one from the path.\n`,
+    );
+    process.exit(2);
+  }
+
+  const name = args.name ?? slugFromPath(absPath);
 
   process.stdout.write(`Registering repo…\n`);
   process.stdout.write(`  name: ${name}\n`);
