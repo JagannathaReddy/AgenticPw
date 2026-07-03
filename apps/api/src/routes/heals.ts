@@ -9,6 +9,7 @@ const createHealSchema = z.object({
   testPath: z.string().min(1),
   pageObjectPath: z.string().optional(),
   repoId: z.string().uuid().optional(),
+  includeGlobs: z.array(z.string().min(1)).max(20).optional(),
 });
 
 const DEFAULT_BUDGET: ManifestBudget = {
@@ -22,7 +23,7 @@ const DEFAULT_POLICY: ManifestPolicy = {
   trustRung: 1,
   canWritePR: false,
   canFileIssue: true,
-  refuseCategories: ['product_bug', 'assertion_broken', 'infra', 'unknown'],
+  refuseCategories: ['product_bug', 'assertion_broken', 'infra', 'out_of_scope', 'unknown'],
   escalationSLA: 300,
 };
 
@@ -43,6 +44,7 @@ export function registerHealsRoutes(app: FastifyInstance, db: Db): void {
         testPath: input.testPath,
         pageObjectPath: input.pageObjectPath ?? null,
         repoId: input.repoId ?? null,
+        includeGlobs: input.includeGlobs ?? null,
       },
     };
 

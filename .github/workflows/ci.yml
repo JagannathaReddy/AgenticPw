@@ -49,6 +49,8 @@ jobs:
         run: node --test apps/worker/dist/activities/verify-outcomes.test.js
       - name: generator-parse tests
         run: node --test apps/worker/dist/activities/generator-parse.test.js
+      - name: stack-sources tests
+        run: node --test apps/worker/dist/activities/stack-sources.test.js
 
   prompts:
     name: Prompt validation

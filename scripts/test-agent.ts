@@ -48,7 +48,7 @@ function usage(): never {
 
 Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
-  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>]
+  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent get <manifestId>
@@ -536,17 +536,22 @@ interface HealArgs {
   testPath: string;
   pageObjectPath?: string;
   repoRef?: string;
+  includeGlobs: string[];
 }
 
 function parseHeal(argv: string[]): HealArgs {
   let testPath = '';
   let pageObjectPath: string | undefined;
   let repoRef: string | undefined;
+  const includeGlobs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--repo') repoRef = argv[++i];
     else if (a === '--page-object') pageObjectPath = argv[++i];
-    else if (a === '--help' || a === '-h') usage();
+    else if (a === '--include') {
+      const g = argv[++i];
+      if (g) includeGlobs.push(g);
+    } else if (a === '--help' || a === '-h') usage();
     else if (a.startsWith('-')) {
       process.stderr.write(`Unknown flag: ${a}\n`);
       usage();
@@ -557,7 +562,7 @@ function parseHeal(argv: string[]): HealArgs {
     }
   }
   if (!testPath) usage();
-  return { testPath, pageObjectPath, repoRef };
+  return { testPath, pageObjectPath, repoRef, includeGlobs };
 }
 
 async function healCommand(argv: string[]): Promise<void> {
@@ -574,6 +579,8 @@ async function healCommand(argv: string[]): Promise<void> {
   process.stdout.write(`Submitting heal manifest…\n`);
   process.stdout.write(`  test:  ${args.testPath}\n`);
   if (args.pageObjectPath) process.stdout.write(`  page:  ${args.pageObjectPath}\n`);
+  if (args.includeGlobs.length > 0)
+    process.stdout.write(`  include: ${args.includeGlobs.join(', ')}\n`);
   process.stdout.write('\n');
 
   const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/heals', {
@@ -583,6 +590,7 @@ async function healCommand(argv: string[]): Promise<void> {
       testPath: args.testPath,
       ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
       ...(repoId ? { repoId } : {}),
+      ...(args.includeGlobs.length > 0 ? { includeGlobs: args.includeGlobs } : {}),
     }),
   });
 

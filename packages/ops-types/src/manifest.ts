@@ -80,6 +80,7 @@ export type RefusalCategory =
   | 'ambiguous_fix'
   | 'over_budget'
   | 'infra'
+  | 'out_of_scope'
   | 'unknown';
 
 export interface ManifestPolicy {

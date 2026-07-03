@@ -18,6 +18,7 @@ Variables:
 - `{{page_object_source}}` — current contents of the page object (or "(none — spec has no separate POM)")
 - `{{aria_snapshot}}` — current a11y tree of the target page (or "(none captured)")
 - `{{repo_profile}}` — extracted RepoProfile YAML, or heuristic summary
+- `{{related_sources}}` — helper files from the failure's stack trace / --include globs (read-only context; you cannot patch these)
 
 ---
 
@@ -54,6 +55,10 @@ Variables:
 ```typescript
 {{page_object_source}}
 ```
+
+## Related sources from the stack trace (read-only — you may NOT patch these)
+
+{{related_sources}}
 
 ## Repo style guidance
 

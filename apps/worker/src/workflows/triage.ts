@@ -8,6 +8,11 @@ import { classifyFailure } from '../activities/classify-failure.js';
 import { classifyWithLLM } from '../activities/classify-llm.js';
 import { captureA11ySnapshot, extractTargetUrl } from '../activities/capture-a11y.js';
 import { extractErrorText, runPlaywright } from '../activities/judge-runner.js';
+import {
+  expandIncludeGlobs,
+  extractStackPaths,
+  loadRelatedSources,
+} from '../activities/stack-sources.js';
 import { FsCache } from '../cache.js';
 import { withTenant } from '../db.js';
 import { manifestLogger } from '../logger.js';
@@ -23,6 +28,7 @@ export interface TriageManifestRow {
       repoId?: string | null;
       testPath: string;
       pageObjectPath?: string | null;
+      includeGlobs?: string[] | null;
     };
   };
   audit: { correlationId: string };
@@ -100,7 +106,12 @@ export async function runTriage(
 ): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
   const tenant = { orgId: manifest.org_id, workspaceId: manifest.workspace_id };
   const log = manifestLogger(manifest.id, manifest.audit.correlationId);
-  const { repoId, testPath: rawTestPath, pageObjectPath: rawPagePath } = manifest.goal.params;
+  const {
+    repoId,
+    testPath: rawTestPath,
+    pageObjectPath: rawPagePath,
+    includeGlobs,
+  } = manifest.goal.params;
   const repo = await loadRepoContext(deps.pool, tenant, deps.config.repoRoot, repoId ?? null);
 
   await withTenant(deps.pool, tenant, async (client) => {
@@ -250,7 +261,64 @@ export async function runTriage(
     });
   }
 
-  // ── 3. Snapshot the target page (best-effort, non-blocking) ───────────
+  // ── 3. Gather helper sources from the stack trace (#10) ───────────────
+  // Enterprise suites route failures through layers of helper classes; the
+  // healer needs to see those files or it patches blind. Walk the stack in
+  // the failure output, load the top frames, and honor --include globs.
+  const stackPaths = extractStackPaths(`${errorText}\n${baseline.output}`);
+  const includedPaths =
+    includeGlobs && includeGlobs.length > 0
+      ? await expandIncludeGlobs(repo.repoRoot, includeGlobs)
+      : [];
+  const related = await loadRelatedSources(
+    repo.repoRoot,
+    // User-supplied globs first — explicit beats inferred when we hit the cap.
+    [...includedPaths, ...stackPaths],
+    { exclude: [testPath, pageObjectPath], max: 3 },
+  );
+
+  if (related.loaded.length > 0 || related.missing.length > 0) {
+    log.info(
+      {
+        stage: 'related_sources',
+        loaded: related.loaded.map((s) => s.path),
+        missing: related.missing,
+        fromGlobs: includedPaths.length,
+        fromStack: stackPaths.length,
+      },
+      'Gathered related sources for healer',
+    );
+    await withTenant(deps.pool, tenant, async (client) => {
+      await appendEvent(client, manifest, 'progress', null, null, {
+        stage: 'related_sources',
+        loaded: related.loaded.map((s) => s.path),
+        missing: related.missing,
+      });
+    });
+  }
+
+  // The stack points at helper files that don't exist on disk (renamed,
+  // generated, or outside the registered repoRoot). Healing blind would
+  // produce a nonsense patch — refuse with a category the user can act on
+  // instead of letting it fall through as `unknown` after a wasted LLM call.
+  const stackBeyondSpec = stackPaths.filter(
+    (p) => p !== testPath && p !== pageObjectPath,
+  );
+  if (
+    stackBeyondSpec.length > 0 &&
+    related.loaded.length === 0 &&
+    related.missing.length > 0
+  ) {
+    return terminate(deps.pool, tenant, manifest, 'rejected', {
+      category: 'out_of_scope',
+      reason:
+        `Failure originates in files the agent cannot read: ` +
+        `${related.missing.join(', ')}. ` +
+        `If they live elsewhere, re-run with --include '<glob>' or register the repo with the correct path.`,
+    });
+  }
+
+  // ── 4. Snapshot the target page (best-effort, non-blocking) ───────────
   const specSource = await fs
     .readFile(path.join(repo.repoRoot, testPath), 'utf8')
     .catch(() => '');
@@ -287,25 +355,38 @@ export async function runTriage(
     });
   });
 
-  // ── 4. LLM heal ────────────────────────────────────────────────────────
+  // ── 5. LLM heal ────────────────────────────────────────────────────────
   log.info({ stage: 'heal' }, 'Calling healer LLM');
-  const heal = await runHeal(
-    {
-      manifestId: manifest.id,
-      correlationId: manifest.audit.correlationId,
-      testPath,
-      pageObjectPath,
-      failureOutputTail: baseline.output,
-      classification,
-      ariaSnapshot: ariaSnapshotYaml,
-      repoRoot: repo.repoRoot,
-      repoProfile: repo.repoProfile,
-    },
-    deps.artifacts,
-    deps.config,
-    deps.pool,
-    tenant,
-  );
+  let heal;
+  try {
+    heal = await runHeal(
+      {
+        manifestId: manifest.id,
+        correlationId: manifest.audit.correlationId,
+        testPath,
+        pageObjectPath,
+        failureOutputTail: baseline.output,
+        classification,
+        ariaSnapshot: ariaSnapshotYaml,
+        repoRoot: repo.repoRoot,
+        repoProfile: repo.repoProfile,
+        relatedSources: related.loaded,
+      },
+      deps.artifacts,
+      deps.config,
+      deps.pool,
+      tenant,
+    );
+  } catch (err) {
+    // A malformed LLM response must reject THIS manifest, not crash the
+    // poll loop and leave it stuck in_progress until the next worker boot.
+    const message = (err as Error).message;
+    log.warn({ stage: 'heal', err: message }, 'Healer failed');
+    return terminate(deps.pool, tenant, manifest, 'rejected', {
+      category: 'heal_parse_error',
+      reason: `Healer response could not be used: ${message}. Raw output is in heal-raw.md.`,
+    });
+  }
   log.info(
     {
       stage: 'heal',
@@ -334,7 +415,7 @@ export async function runTriage(
     });
   }
 
-  // ── 5. Write patched files to a manifest-scoped subdir ────────────────
+  // ── 6. Write patched files to a manifest-scoped subdir ────────────────
   const shortId = manifest.id.slice(0, 8);
   const patchDir = path.join('tests', 'triaged', shortId);
   const patchedSpecRel = path.join(patchDir, path.basename(heal.parse.files.test.path));
@@ -362,7 +443,7 @@ export async function runTriage(
   await fs.writeFile(specAbs, heal.parse.files.test.content);
   await fs.writeFile(pageAbs, heal.parse.files.pageObject.content);
 
-  // ── 6. Verify the patched test passes ─────────────────────────────────
+  // ── 7. Verify the patched test passes ─────────────────────────────────
   const verify = await runPlaywright(repo.repoRoot, patchedSpecRel, deps.config.testTimeoutMs, {
     project: resolvedProject,
   });

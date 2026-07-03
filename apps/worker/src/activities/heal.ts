@@ -8,7 +8,9 @@ import type { WorkerConfig } from '../config.js';
 import type { Tenant } from '../db.js';
 import { complete } from '../llm.js';
 import type { Classification } from './classify-failure.js';
+import { GeneratorParseError } from './generator-parse.js';
 import { parseHealOutput, type HealParseResult } from './heal-parse.js';
+import { renderRelatedSources, type RelatedSource } from './stack-sources.js';
 
 export interface HealInput {
   manifestId: string;
@@ -20,6 +22,8 @@ export interface HealInput {
   ariaSnapshot: string;     // "(none captured)" when we have no browser context yet
   repoRoot: string;
   repoProfile: unknown | null;
+  /** Helper files pulled from the stack trace / --include globs (#10). */
+  relatedSources: RelatedSource[];
 }
 
 export interface HealOutput {
@@ -90,6 +94,7 @@ export async function runHeal(
       page_object_source: pageObjectSource,
       aria_snapshot: input.ariaSnapshot,
       repo_profile: summarizeProfileForHealer(input.repoProfile),
+      related_sources: renderRelatedSources(input.relatedSources),
     },
   });
 
@@ -129,10 +134,43 @@ export async function runHeal(
     ].join('\n'),
   );
 
-  const parse = parseHealOutput(response.content);
+  const parse = parseHealWithScopeCheck(response.content, input.relatedSources);
   return {
     parse,
     promptRef: { file: prompt.meta.id, hash: prompt.meta.hash },
     usage: response.usage,
   };
+}
+
+/**
+ * Parse the healer output; when the model ignored the scope rule and emitted
+ * a patch for a related-source helper (it can only patch spec + POM), turn
+ * that into an `out_of_scope` refusal instead of a hard parse error. The
+ * model's suggested patch stays in heal-raw.md so the user can apply it by
+ * hand — the reason tells them where to look.
+ */
+function parseHealWithScopeCheck(
+  raw: string,
+  relatedSources: RelatedSource[],
+): HealParseResult {
+  try {
+    return parseHealOutput(raw);
+  } catch (err) {
+    if (err instanceof GeneratorParseError) {
+      const touched = relatedSources
+        .map((s) => s.path)
+        .filter((p) => raw.includes(`FILE: ${p}`) || raw.includes(`FILE:${p}`));
+      if (touched.length > 0) {
+        return {
+          kind: 'refused',
+          category: 'out_of_scope',
+          reason:
+            `The fix belongs in ${touched.join(', ')} — outside the heal scope ` +
+            `(spec + page object). The model's suggested patch is saved in the ` +
+            `manifest artifact (heal-raw.md); review and apply it manually.`,
+        };
+      }
+    }
+    throw err;
+  }
 }
