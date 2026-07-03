@@ -49,6 +49,7 @@ function usage(): never {
 Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
   test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>]
+  test-agent apply <manifestId>       # write a verified triage patch onto the original file
   test-agent get <manifestId>
   test-agent list
 
@@ -195,17 +196,17 @@ function printTerminal(m: AnyManifest): void {
         process.stdout.write(`✓ Triage: test already passes — nothing to heal\n`);
         if (r.testPath) process.stdout.write(`  test: ${String(r.testPath)}\n`);
       } else {
-        process.stdout.write(`✓ Triage complete — patched test passes\n`);
+        process.stdout.write(`✓ Triage: patch verified (dry-run — nothing on disk changed)\n`);
         if (r.category) process.stdout.write(`  category: ${String(r.category)}\n`);
         if (r.patchedTestPath)
-          process.stdout.write(`  patched: ${String(r.patchedTestPath)}\n`);
+          process.stdout.write(`  patched:  ${String(r.patchedTestPath)}\n`);
         if (r.originalTestPath)
-          process.stdout.write(`  original (unchanged): ${String(r.originalTestPath)}\n`);
+          process.stdout.write(`  original: ${String(r.originalTestPath)} (unchanged)\n`);
+        // Diff is printed by watchManifest right before this — it needs
+        // filesystem reads, so we do that async there and pass here via a
+        // separate call site. See emitDiffIfAvailable below.
         process.stdout.write('\n');
-        if (r.patchedTestPath)
-          process.stdout.write(
-            `Compare:  diff ${String(r.originalTestPath)} ${String(r.patchedTestPath)}\n`,
-          );
+        process.stdout.write(`Apply the patch:  npm run agent -- apply ${m.id}\n`);
       }
     } else {
       process.stdout.write(`✓ Coverage complete\n`);
@@ -227,6 +228,36 @@ function printTerminal(m: AnyManifest): void {
   process.stdout.write(`\nartifact:  local-artifacts/${m.id}/\n`);
 }
 
+async function emitDiffIfTriageSucceeded(m: AnyManifest): Promise<void> {
+  const role = m.role ?? m.goal?.kind ?? 'coverage';
+  if (m.status !== 'succeeded') return;
+  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) return;
+  const r = m.result ?? {};
+  if (r.alreadyPassing) return;
+  const originalPath = r.originalTestPath as string | undefined;
+  const patchedPath = r.patchedTestPath as string | undefined;
+  if (!originalPath || !patchedPath) return;
+
+  const fs = await import('node:fs/promises');
+  const [orig, patched] = await Promise.all([
+    fs.readFile(originalPath, 'utf8').catch(() => ''),
+    fs.readFile(patchedPath, 'utf8').catch(() => ''),
+  ]);
+  if (!orig || !patched) return;
+
+  const { renderUnifiedDiff } = await import('./diff.js');
+  const diffText = renderUnifiedDiff(orig, patched, {
+    aLabel: originalPath,
+    bLabel: patchedPath,
+    contextLines: 2,
+  });
+
+  process.stdout.write('\nDiff:\n');
+  for (const line of diffText.split('\n')) {
+    process.stdout.write(`  ${line}\n`);
+  }
+}
+
 async function watchManifest(id: string): Promise<void> {
   const seen = new Set<string>();
   const startTime = Date.now();
@@ -246,6 +277,7 @@ async function watchManifest(id: string): Promise<void> {
       process.stdout.write(`  [${elapsed}s] ${label}${suffix}\n`);
     }
     if (['succeeded', 'failed', 'rejected', 'cancelled'].includes(m.status)) {
+      await emitDiffIfTriageSucceeded(m);
       printTerminal(m);
       process.exit(m.status === 'succeeded' ? 0 : 1);
     }
@@ -466,6 +498,63 @@ async function healCommand(argv: string[]): Promise<void> {
   await watchManifest(submitted.manifestId);
 }
 
+async function applyCommand(argv: string[]): Promise<void> {
+  const id = argv[0];
+  if (!id) {
+    process.stderr.write('Manifest id required. See recent triage runs with: test-agent list\n');
+    process.exit(2);
+  }
+
+  const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
+  const role = m.role ?? m.goal?.kind ?? '';
+  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) {
+    process.stderr.write(`Manifest ${id.slice(0, 8)} is not a triage manifest (role=${role}).\n`);
+    process.exit(2);
+  }
+  if (m.status !== 'succeeded') {
+    process.stderr.write(`Manifest ${id.slice(0, 8)} is ${m.status}, nothing to apply.\n`);
+    process.exit(1);
+  }
+  const r = m.result ?? {};
+  const originalTestPath = r.originalTestPath as string | undefined;
+  const patchedTestPath = r.patchedTestPath as string | undefined;
+  const patchedPageObjectPath = r.patchedPageObjectPath as string | undefined;
+  if (!originalTestPath || !patchedTestPath) {
+    process.stderr.write(`Manifest ${id.slice(0, 8)} has no patched files (may be alreadyPassing).\n`);
+    process.exit(1);
+  }
+
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+
+  // Copy patched test on top of the original the user passed to heal.
+  await fs.copyFile(patchedTestPath, originalTestPath);
+  process.stdout.write(`✓ overwrote ${originalTestPath}\n`);
+
+  // Copy the patched page object too if it exists and we know the original.
+  if (patchedPageObjectPath) {
+    // The heal input recorded the page object it read from (if any). Fall
+    // back to the sibling ./pages/<same basename> next to the original.
+    const originalPage =
+      ((m.goal?.params ?? {}) as { pageObjectPath?: string }).pageObjectPath ??
+      path.join(
+        path.dirname(originalTestPath),
+        'pages',
+        path.basename(patchedPageObjectPath),
+      );
+    try {
+      await fs.copyFile(patchedPageObjectPath, originalPage);
+      process.stdout.write(`✓ overwrote ${originalPage}\n`);
+    } catch (err) {
+      process.stdout.write(
+        `⚠ could not overwrite page object at ${originalPage}: ${(err as Error).message}\n`,
+      );
+    }
+  }
+
+  process.stdout.write('\nRun: npx playwright test ' + originalTestPath + '\n');
+}
+
 async function reposCommand(): Promise<void> {
   const list = await apiCall<
     Array<{ id: string; name: string; localPath: string; status: string; profileId?: string }>
@@ -493,6 +582,8 @@ async function main(): Promise<void> {
       return listCommand();
     case 'heal':
       return healCommand(rest);
+    case 'apply':
+      return applyCommand(rest);
     case 'init':
       return initCommand(rest);
     case 'repos':
