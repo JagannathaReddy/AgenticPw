@@ -7,6 +7,7 @@ import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
 import type { Tenant } from '../db.js';
 import { complete } from '../llm.js';
+import { detectPlaywrightConfig, type DetectedPlaywrightConfig } from './detect-playwright-config.js';
 
 /**
  * Onboarding activity — analyze a local repo and produce a RepoProfile.
@@ -31,7 +32,8 @@ export interface OnboardingInput {
 }
 
 export interface OnboardingOutput {
-  profile: unknown; // RepoProfile shape from prompt schema
+  profile: unknown; // RepoProfile shape from prompt schema, augmented with playwright_detected
+  detectedPlaywright: DetectedPlaywrightConfig | null;
   extractorVersion: string;
   confidence: number;
   filesSampled: number;
@@ -219,11 +221,24 @@ export async function runOnboarding(
     ].join('\n'),
   );
 
-  const profile = extractYaml(response.content);
+  const profile = extractYaml(response.content) as Record<string, unknown> | null;
   const confidence = pickConfidence(profile);
 
+  // Detect the target repo's actual Playwright config too — the LLM sees
+  // only the source of playwright.config, but Playwright itself is the
+  // source of truth for the resolved project graph.
+  const detectedPlaywright = await detectPlaywrightConfig(input.localPath);
+
+  // Augment the profile with the detection result so consumers (Coverage,
+  // Triage) can read primaryProject / projects without a second query.
+  const augmentedProfile: Record<string, unknown> = {
+    ...(profile ?? {}),
+    playwright_detected: detectedPlaywright ?? null,
+  };
+
   return {
-    profile,
+    profile: augmentedProfile,
+    detectedPlaywright,
     extractorVersion: prompt.meta.id,
     confidence,
     filesSampled: samples.filesSampled,

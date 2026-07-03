@@ -120,9 +120,18 @@ export async function runTriage(
   const testPath = rawTestPath;
   const pageObjectPath = rawPagePath ?? (await guessPageObjectPath(repo.repoRoot, testPath));
 
+  // Resolve the Playwright project. Priority:
+  //   1. deps.config.playwrightProject (env override)
+  //   2. repoProfile.playwright_detected.primaryProject (auto-detected)
+  //   3. no --project — let Playwright default
+  const detected = ((repo.repoProfile as Record<string, unknown> | null)
+    ?.playwright_detected ?? null) as { primaryProject?: string } | null;
+  const resolvedProject =
+    deps.config.playwrightProject || detected?.primaryProject || '';
+
   // ── 1. Baseline run ────────────────────────────────────────────────────
   const baseline = await runPlaywright(repo.repoRoot, testPath, deps.config.testTimeoutMs, {
-    project: deps.config.playwrightProject,
+    project: resolvedProject,
   });
   log.info(
     {
@@ -353,7 +362,7 @@ export async function runTriage(
 
   // ── 6. Verify the patched test passes ─────────────────────────────────
   const verify = await runPlaywright(repo.repoRoot, patchedSpecRel, deps.config.testTimeoutMs, {
-    project: deps.config.playwrightProject,
+    project: resolvedProject,
   });
   log.info(
     {
