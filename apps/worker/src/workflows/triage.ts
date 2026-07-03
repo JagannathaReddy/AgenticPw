@@ -5,6 +5,7 @@ import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
 import { runHeal } from '../activities/heal.js';
 import { classifyFailure } from '../activities/classify-failure.js';
+import { classifyWithLLM } from '../activities/classify-llm.js';
 import { captureA11ySnapshot, extractTargetUrl } from '../activities/capture-a11y.js';
 import { extractErrorText, runPlaywright } from '../activities/judge-runner.js';
 import { withTenant } from '../db.js';
@@ -163,12 +164,44 @@ export async function runTriage(
 
   // ── 2. Classify ────────────────────────────────────────────────────────
   const errorText = extractErrorText(baseline.json);
-  const classification = classifyFailure({ errorText, output: baseline.output });
+  let classification = classifyFailure({ errorText, output: baseline.output });
+
+  // When the fast regex path bailed to `unknown`, escalate to an LLM
+  // classifier before rejecting. Real-repo error strings are typically
+  // wrapped in custom error classes the regexes can't parse.
+  if (classification.category === 'unknown') {
+    const llmVerdict = await classifyWithLLM(
+      {
+        manifestId: manifest.id,
+        correlationId: manifest.audit.correlationId,
+        testPath,
+        errorText,
+        rawOutput: baseline.output,
+      },
+      deps.config,
+      deps.pool,
+      tenant,
+    );
+    if (llmVerdict) {
+      log.info(
+        {
+          stage: 'classify_llm',
+          category: llmVerdict.category,
+          isSafeToHeal: llmVerdict.isSafeToHeal,
+          summary: llmVerdict.summary,
+        },
+        'LLM classifier rescued a regex-unknown',
+      );
+      classification = llmVerdict;
+    }
+  }
+
   log.info(
     {
       stage: 'classify',
       category: classification.category,
       isSafeToHeal: classification.isSafeToHeal,
+      via: classification.evidence.startsWith('LLM fallback') ? 'llm' : 'regex',
     },
     'Classified failure',
   );
