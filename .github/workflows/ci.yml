@@ -51,6 +51,8 @@ jobs:
         run: node --test apps/worker/dist/activities/generator-parse.test.js
       - name: stack-sources tests
         run: node --test apps/worker/dist/activities/stack-sources.test.js
+      - name: flake-analyzer tests
+        run: node --test apps/worker/dist/activities/flake-analyzer.test.js
 
   prompts:
     name: Prompt validation

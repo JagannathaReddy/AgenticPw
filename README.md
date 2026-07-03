@@ -1,8 +1,8 @@
 # test-agent — Agentic QA platform (local dev)
 
-**Release:** `v0.3.0-dx` — developer-trial fixes + DX batch (issues #2–#13, #15, #17, #19–#20, #10). Previous: [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
+**Release:** `v0.4.0-steward` — Milestone D closes the local Q1 plan. See [docs/MILESTONE-D.md](docs/MILESTONE-D.md). Previous: [v0.3.0-dx] · [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
 
-An AI teammate for existing Playwright suites. Describe a test in English → get code in your repo's style. Point it at a failing test → get a patched version that passes, or a clear refusal with a category (including `out_of_scope` when the fix lives in a helper class it can see but must not patch). Hand it a rough `codegen` draft → get it polished into your repo's conventions. Watch your suite → get a health report (Milestone D, planned).
+An AI teammate for existing Playwright suites. Describe a test in English → get code in your repo's style. Point it at a failing test → get a patched version that passes, or a clear refusal with a category (including `out_of_scope` when the fix lives in a helper class it can see but must not patch). Hand it a rough `codegen` draft → get it polished into your repo's conventions. Ask about your suite → get a health report that separates flaky from broken and names heal candidates.
 
 **Runs on a laptop.** Postgres in Docker, Node processes on host, Playwright on host, real LLM APIs (Anthropic or OpenAI). The path to cloud is scoped in [docs/Q1-TECHNICAL-DESIGN.md](docs/Q1-TECHNICAL-DESIGN.md) — it's designed for, not needed for, this quick start.
 
@@ -64,6 +64,9 @@ npm run agent -- doctor
 
 # What has the LLM cost you lately?
 npm run agent -- cost --since 7d
+
+# How healthy is the suite? Runs it 3× and separates flaky from broken
+npm run agent -- steward --repo <shortId>
 ```
 
 Real Chromium opens. Real GPT-4o-mini writes / heals code. Real Playwright runs it. `succeeded` in ~20 seconds. See [docs/DEMO.md](docs/DEMO.md) for the full 4-part walkthrough with sample output.
@@ -75,16 +78,16 @@ Real Chromium opens. Real GPT-4o-mini writes / heals code. Real Playwright runs 
 ```
 apps/
   api/                 Fastify HTTP surface (POST /v1/tests, /v1/repos, /v1/heals,
-                       /v1/improves; SSE at GET /v1/tests/:id/events)
+                       /v1/improves, /v1/stewards; SSE at GET /v1/tests/:id/events)
   worker/              In-process poll loop dispatching Coverage / Onboarding /
-                       Triage / Improve
+                       Triage / Improve / Steward
 packages/
   ops-types/           Shared TypeScript: TaskManifest, RepoProfile, LLM contract
   ops-prompts/         Prompt loader (YAML front-matter + Mustache render)
   eval-harness/        Golden-corpus regression runner for prompt changes
   rls-tests/           Postgres RLS isolation tests (9 tests, ~130ms)
 prompts/               Versioned prompts (system + user-template per role)
-  explorer/  generator/  healer/  improver/  judge/  classifier/  onboarding/  eval/
+  explorer/  generator/  healer/  improver/  judge/  classifier/  onboarding/  steward/  eval/
 sql/migrations/        Postgres schema — RLS-first, 12 migrations
 scripts/               dev-up.sh, dev-migrate.sh, seed-dev-tenant.ts,
                        test-agent.ts, doctor.ts, cost.ts, diff.ts, demo-reset.sh
@@ -99,7 +102,7 @@ infra/future/          Terraform for the cloud v1 target — parked
 |---------|--------------|
 | `npm run dev:up` | Start Postgres, apply migrations, seed dev tenant |
 | `npm run dev` | Start API (:3001) + worker in parallel with tsx watch |
-| `npm run agent` | Invoke the CLI (`add`, `heal`, `improve`, `apply`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
+| `npm run agent` | Invoke the CLI (`add`, `heal`, `improve`, `steward`, `apply`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
 | `npm run demo:reset` | Reset to clean recording state (see [DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md)) |
 | `npm run db:up` | Just start Postgres |
 | `npm run db:migrate` | Apply migrations to running Postgres |
@@ -120,7 +123,7 @@ Copy `.env.example` → `.env` and fill in what you need. Defaults work for DB +
 
 1. CLI (`test-agent add / init / heal / improve`) → `POST /v1/tests | /v1/repos/:id/onboard | /v1/heals | /v1/improves` → API inserts a `manifests` row with `status = pending`
 2. Worker polls Postgres (`FOR UPDATE SKIP LOCKED`) → claims a manifest → sets `assigned`
-3. Role-based workflow runs: **Coverage** (Explorer → Generator → Judge), **Onboarding** (scan → LLM classify → persist profile), **Triage** (baseline → classify → stack-walk helpers → snapshot → heal → verify), or **Improve** (read spec → LLM polish → verify) — every phase appends to `manifest_events`
+3. Role-based workflow runs: **Coverage** (Explorer → Generator → Judge), **Onboarding** (scan → LLM classify → persist profile), **Triage** (baseline → classify → stack-walk helpers → snapshot → heal → verify), **Improve** (read spec → LLM polish → verify), or **Steward** (run suite K× → persist per-test outcomes → flake analysis → health report) — every phase appends to `manifest_events`
 4. Terminal state (`succeeded` | `rejected` | `failed`) recorded on the manifest with a `result` JSON blob; the CLI watches live over SSE
 
 Full sequence diagrams in [docs/Q1-SEQUENCE-DIAGRAMS.md](docs/Q1-SEQUENCE-DIAGRAMS.md).
@@ -141,6 +144,7 @@ When we swap dev auth for WorkOS in v1, the middleware changes; the RLS policies
 ## What's *not* here yet
 
 - GitHub App PR flow (v1 — cloud deploy)
-- Steward Agent — flake detection, weekly reports (Milestone D)
+- Scheduled weekly Steward runs (use cron locally; Temporal cron in v1)
 - WorkOS SSO, Temporal Cloud, multi-tenancy (v1)
 - Sandboxed browser pool (v1 — Chromium in gVisor + Egress Broker)
+- Batch heal (#14), feedback loop (#16), GitHub Action (#18) — see [docs/ISSUE-DEFERRALS.md](docs/ISSUE-DEFERRALS.md)

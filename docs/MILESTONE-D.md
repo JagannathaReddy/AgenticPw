@@ -1,0 +1,87 @@
+# v0.4.0-steward — Delivery status (Milestone D)
+
+Snapshot at end of Milestone D. Follows the shape of [MILESTONE-C.md](./MILESTONE-C.md), focused on the Steward Agent — suite health via repeated full runs.
+
+**Bottom line:** the platform now answers "how healthy is my suite?" with data instead of vibes. One command runs the whole suite K times, separates *flaky* from *actually broken*, classifies each failure with the same taxonomy Triage uses, and writes a markdown health report that names heal candidates.
+
+This closes the fourth and final flow from the local Q1 plan (Coverage → Onboarding → Triage → **Steward**).
+
+---
+
+## What ships in v0.4.0-steward
+
+### Runnable additions
+
+| Command | What it does |
+|---------|--------------|
+| `test-agent steward` | Run the suite 3× and produce a health report |
+| `test-agent steward --runs N` | Same with N runs (1–10) |
+| `test-agent steward --repo <shortId>` | Scope to a registered repo; uses its detected Playwright project |
+| `POST /v1/stewards` | API endpoint the CLI calls |
+
+### New pieces (real, not stubbed)
+
+| Piece | Tech | State |
+|-------|------|-------|
+| Suite runner | Spawn whole-suite `npx playwright test --reporter=json`; recursive per-test parse (nested describes, retries) | Real |
+| Flake analyzer | Pure functions; verdicts: healthy / flaky / always_failing / skipped | Real, 9 unit tests in CI |
+| Verdict rules | Mixed pass/fail across runs → flaky; passed-only-after-retry → flaky; failed every run → always_failing | Real |
+| Error signatures | First error line, ANSI-stripped, classified with the Triage taxonomy | Real |
+| Health report | Deterministic markdown: scoreboard, ranked problem tests, per-test run history (✓/✗), suggested next steps, slowest-5 | Real |
+| Executive summary | Optional LLM garnish (gpt-4o-mini, ~$0.0002); report is complete without it | Real, non-fatal on failure |
+| `suite_runs` + `test_results` | Migration 0012; RLS-scoped, append-only for `app_user` | Real |
+
+### Design decisions
+
+- **A red suite is still a successful steward manifest.** The deliverable is the report; only "no parseable results at all" rejects.
+- **Heal candidates are cross-referenced.** An always-failing test whose category is `locator_drift` or `timing` gets a ready-to-paste `agent heal` command in the report; refuse-categories get "likely needs a human."
+- **History lives in Postgres, not just the artifact.** `test_results` keyed by `(workspace, file, title)` is the substrate for trend lines ("flakier than last week") when the weekly cadence arrives.
+- **Weekly cadence is documented, not built.** On a laptop there's no scheduler; the README suggests cron. The cloud v1 turns this into a Temporal cron workflow — the manifest shape doesn't change.
+
+---
+
+## Observed smoke (3 runs, seeded suite)
+
+Suite contents for the smoke: one healthy test (`seed.spec.ts`), one deterministic
+flake (marker-file alternator), one consistently-broken locator.
+
+```
+$ npm run agent -- steward --runs 3
+
+  [ 13.1s] progress · suite_run_done — run 1/3 · 3 tests · 12432ms · passed=2
+  [ 25.3s] progress · suite_run_done — run 2/3 · 3 tests · 12102ms · passed=2
+  [ 37.9s] progress · suite_run_done — run 3/3 · 3 tests · 12319ms · passed=2
+  [ 40.4s] succeeded
+
+✓ Steward: suite health report ready
+  3 tests × 3 runs — 1 healthy · 1 flaky · 1 always-failing · 0 skipped
+```
+
+Report highlights (deterministic sections):
+
+| verdict | test | detected because |
+|---|---|---|
+| ✅ healthy | `seed.spec.ts` | passed all 3 runs, no retries |
+| 🎲 flaky | `flaky-demo.spec.ts` (marker-file alternator) | passed only via in-run retries, every run |
+| ❌ always failing | `broken-demo.spec.ts` (dead locator) | failed 3/3; classified **locator_drift** from the full error text |
+
+Suggested next steps section produced a ready-to-paste heal command:
+
+> `tests/broken-demo.spec.ts` fails consistently with **locator_drift** — a heal
+> candidate: `npm run agent -- heal tests/broken-demo.spec.ts`
+
+Executive summary (gpt-4o-mini, ~$0.0002) correctly separated the flake from
+the breakage and recommended the locator fix first.
+
+Total: 40 s wall clock, one LLM call, zero mutations to the suite.
+
+---
+
+## What's deferred
+
+| Item | Why |
+|------|-----|
+| Trend deltas ("worse than last report") | Needs ≥2 reports; query exists (`test_results` by ident), rendering doesn't |
+| Auto-quarantine (skip-annotate flaky tests) | Writing to specs crosses the trust-rung boundary; needs the #16 feedback loop first |
+| Scheduled weekly runs | No daemon on a laptop; cron/Temporal in v1 |
+| Steward → Triage handoff (auto-file heal manifests) | Wants #14 batch heal so one report can spawn N heals |

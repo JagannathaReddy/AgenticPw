@@ -7,6 +7,7 @@ import { registerHealsRoutes } from './routes/heals.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerImprovesRoutes } from './routes/improves.js';
 import { registerReposRoutes } from './routes/repos.js';
+import { registerStewardsRoutes } from './routes/stewards.js';
 import { registerTestsRoutes } from './routes/tests.js';
 
 async function main(): Promise<void> {
@@ -23,6 +24,7 @@ async function main(): Promise<void> {
   registerTestsRoutes(app, db);
   registerHealsRoutes(app, db);
   registerImprovesRoutes(app, db);
+  registerStewardsRoutes(app, db);
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'Shutting down API');

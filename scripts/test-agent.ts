@@ -50,6 +50,7 @@ Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
   test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
+  test-agent steward [--repo <shortId|uuid>] [--runs N]    # suite health report (default 3 runs)
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent get <manifestId>
   test-agent list
@@ -140,6 +141,12 @@ function describeEvent(kind: string, p: Record<string, unknown>): string {
   const actionCount = g<number>('actionCount');
   if (actionCount !== undefined) bits.push(`${actionCount} actions`);
 
+  const runIndex = g<number>('runIndex');
+  const of = g<number>('of');
+  if (runIndex !== undefined && of !== undefined) bits.push(`run ${runIndex}/${of}`);
+  const totalTests = g<number>('total');
+  if (totalTests !== undefined) bits.push(`${totalTests} tests`);
+
   const verified = g<boolean>('verified');
   if (verified !== undefined) bits.push(`verified=${verified}`);
 
@@ -208,6 +215,22 @@ function printTerminal(m: AnyManifest): void {
         // separate call site. See emitDiffIfAvailable below.
         process.stdout.write('\n');
         process.stdout.write(`Apply the patch:  npm run agent -- apply ${m.id}\n`);
+      }
+    } else if (role === 'steward' || m.goal?.kind === 'suite_health') {
+      process.stdout.write(`✓ Steward: suite health report ready\n`);
+      const n = (k: string) => (r[k] !== undefined ? String(r[k]) : '?');
+      process.stdout.write(
+        `  ${n('totalTests')} tests × ${n('runs')} runs — ` +
+          `${n('healthy')} healthy · ${n('flaky')} flaky · ${n('alwaysFailing')} always-failing · ${n('skipped')} skipped\n`,
+      );
+      if (r.executiveSummary) {
+        process.stdout.write('\n');
+        for (const line of String(r.executiveSummary).split('\n')) {
+          process.stdout.write(`  ${line}\n`);
+        }
+      }
+      if (r.reportPath) {
+        process.stdout.write(`\nFull report:  ${String(r.reportPath)}\n`);
       }
     } else if (role === 'improver' || m.goal?.kind === 'improve_test') {
       process.stdout.write(`✓ Improve: polished spec verified (dry-run — nothing on disk changed)\n`);
@@ -632,6 +655,48 @@ async function improveCommand(argv: string[]): Promise<void> {
   await watchManifest(submitted.manifestId);
 }
 
+async function stewardCommand(argv: string[]): Promise<void> {
+  let repoRef: string | undefined;
+  let runs: number | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--runs') runs = Number(argv[++i]);
+    else if (a === '--help' || a === '-h') usage();
+    else {
+      process.stderr.write(`Unknown argument: ${a}\n`);
+      usage();
+    }
+  }
+  if (runs !== undefined && (!Number.isInteger(runs) || runs < 1 || runs > 10)) {
+    process.stderr.write(`--runs must be an integer between 1 and 10\n`);
+    process.exit(2);
+  }
+
+  let repoId: string | undefined;
+  if (repoRef) {
+    const resolved = await resolveRepoRef(repoRef);
+    repoId = resolved.id;
+    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})\n`);
+  }
+
+  process.stdout.write(`Submitting steward manifest (${runs ?? 3} full-suite runs)…\n\n`);
+
+  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/stewards', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...(repoId ? { repoId } : {}),
+      ...(runs !== undefined ? { runs } : {}),
+    }),
+  });
+
+  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+
+  await watchManifest(submitted.manifestId);
+}
+
 async function applyCommand(argv: string[]): Promise<void> {
   const id = argv[0];
   if (!id) {
@@ -722,6 +787,8 @@ async function main(): Promise<void> {
       return healCommand(rest);
     case 'improve':
       return improveCommand(rest);
+    case 'steward':
+      return stewardCommand(rest);
     case 'apply':
       return applyCommand(rest);
     case 'init':

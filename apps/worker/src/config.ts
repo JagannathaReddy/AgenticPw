@@ -14,6 +14,7 @@ export interface WorkerConfig {
 
   repoRoot: string;      // where generated test files land so Playwright can find them
   testTimeoutMs: number; // per-Judge Playwright run cap
+  suiteTimeoutMs: number; // per full-suite Steward run cap (whole suite, all retries)
 
   /**
    * Playwright project to pass as --project when running tests. Empty
@@ -84,6 +85,7 @@ export function loadConfig(): WorkerConfig {
 
     repoRoot: req('REPO_ROOT', process.cwd()),
     testTimeoutMs: Number(process.env.TEST_TIMEOUT_MS ?? 120_000),
+    suiteTimeoutMs: Number(process.env.SUITE_TIMEOUT_MS ?? 600_000),
     playwrightProject: process.env.PLAYWRIGHT_PROJECT ?? '',
   };
 }
