@@ -8,12 +8,14 @@ import type { OnboardingManifestRow } from './workflows/onboarding.js';
 import { runOnboardingWorkflow } from './workflows/onboarding.js';
 import type { TriageManifestRow } from './workflows/triage.js';
 import { runTriage } from './workflows/triage.js';
+import type { ImproveManifestRow } from './workflows/improve.js';
+import { runImprove } from './workflows/improve.js';
 
 const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
 interface ClaimedManifest {
   id: string;
-  role: 'coverage' | 'onboarding' | 'triage';
+  role: 'coverage' | 'onboarding' | 'triage' | 'improver';
   org_id: string;
   workspace_id: string;
   goal: unknown;
@@ -25,7 +27,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
     const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage')
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -107,6 +109,12 @@ async function main(): Promise<void> {
         });
       } else if (claim.role === 'onboarding') {
         result = await runOnboardingWorkflow(claim as unknown as OnboardingManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else if (claim.role === 'improver') {
+        result = await runImprove(claim as unknown as ImproveManifestRow, {
           pool,
           artifacts,
           config,

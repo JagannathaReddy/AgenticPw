@@ -49,7 +49,8 @@ function usage(): never {
 Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
   test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>]
-  test-agent apply <manifestId>       # write a verified triage patch onto the original file
+  test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
+  test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent get <manifestId>
   test-agent list
 
@@ -208,6 +209,20 @@ function printTerminal(m: AnyManifest): void {
         process.stdout.write('\n');
         process.stdout.write(`Apply the patch:  npm run agent -- apply ${m.id}\n`);
       }
+    } else if (role === 'improver' || m.goal?.kind === 'improve_test') {
+      process.stdout.write(`✓ Improve: polished spec verified (dry-run — nothing on disk changed)\n`);
+      if (r.patchedTestPath)
+        process.stdout.write(`  improved: ${String(r.patchedTestPath)}\n`);
+      if (r.originalTestPath)
+        process.stdout.write(`  original: ${String(r.originalTestPath)} (unchanged)\n`);
+      if (r.notes) {
+        process.stdout.write(`  notes:\n`);
+        for (const line of String(r.notes).split('\n')) {
+          process.stdout.write(`    ${line}\n`);
+        }
+      }
+      process.stdout.write('\n');
+      process.stdout.write(`Apply the polish:  npm run agent -- apply ${m.id}\n`);
     } else {
       process.stdout.write(`✓ Coverage complete\n`);
       if (r.testPath) process.stdout.write(`  spec:  ${String(r.testPath)}\n`);
@@ -231,7 +246,9 @@ function printTerminal(m: AnyManifest): void {
 async function emitDiffIfTriageSucceeded(m: AnyManifest): Promise<void> {
   const role = m.role ?? m.goal?.kind ?? 'coverage';
   if (m.status !== 'succeeded') return;
-  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) return;
+  const isTriage = role === 'triage' || m.goal?.kind === 'heal_test';
+  const isImprove = role === 'improver' || m.goal?.kind === 'improve_test';
+  if (!isTriage && !isImprove) return;
   const r = m.result ?? {};
   if (r.alreadyPassing) return;
   const originalPath = r.originalTestPath as string | undefined;
@@ -575,6 +592,38 @@ async function healCommand(argv: string[]): Promise<void> {
   await watchManifest(submitted.manifestId);
 }
 
+async function improveCommand(argv: string[]): Promise<void> {
+  const args = parseHeal(argv); // same shape: <testPath> [--repo] [--page-object]
+
+  let repoId: string | undefined;
+  if (args.repoRef) {
+    const resolved = await resolveRepoRef(args.repoRef);
+    repoId = resolved.id;
+    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})`);
+    process.stdout.write(resolved.hasProfile ? ` — profile ✓\n` : ` — no profile\n`);
+  }
+
+  process.stdout.write(`Submitting improve manifest…\n`);
+  process.stdout.write(`  test:  ${args.testPath}\n`);
+  if (args.pageObjectPath) process.stdout.write(`  page:  ${args.pageObjectPath}\n`);
+  process.stdout.write('\n');
+
+  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/improves', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      testPath: args.testPath,
+      ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
+      ...(repoId ? { repoId } : {}),
+    }),
+  });
+
+  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+
+  await watchManifest(submitted.manifestId);
+}
+
 async function applyCommand(argv: string[]): Promise<void> {
   const id = argv[0];
   if (!id) {
@@ -584,8 +633,12 @@ async function applyCommand(argv: string[]): Promise<void> {
 
   const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
   const role = m.role ?? m.goal?.kind ?? '';
-  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) {
-    process.stderr.write(`Manifest ${id.slice(0, 8)} is not a triage manifest (role=${role}).\n`);
+  const isTriage = role === 'triage' || m.goal?.kind === 'heal_test';
+  const isImprove = role === 'improver' || m.goal?.kind === 'improve_test';
+  if (!isTriage && !isImprove) {
+    process.stderr.write(
+      `Manifest ${id.slice(0, 8)} is role=${role}; apply only works on triage/improve manifests.\n`,
+    );
     process.exit(2);
   }
   if (m.status !== 'succeeded') {
@@ -659,6 +712,8 @@ async function main(): Promise<void> {
       return listCommand();
     case 'heal':
       return healCommand(rest);
+    case 'improve':
+      return improveCommand(rest);
     case 'apply':
       return applyCommand(rest);
     case 'init':

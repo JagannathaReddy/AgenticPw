@@ -5,6 +5,7 @@ dist/
 local-artifacts/
 tests/autonomous/
 tests/triaged/
+tests/improved/
 .eval-report.json
 playwright-report/
 test-results/
