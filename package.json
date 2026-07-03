@@ -1,8 +1,8 @@
 {
   "name": "test-agent-platform",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Agentic QA platform — Coverage + Onboarding + Triage running locally",
+  "description": "Agentic QA platform — Coverage + Onboarding + Triage + Improve running locally",
   "workspaces": [
     "packages/*",
     "apps/*"
