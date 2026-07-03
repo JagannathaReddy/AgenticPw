@@ -1,8 +1,8 @@
 {
   "name": "test-agent-platform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Agentic QA platform — Coverage MVP running locally",
+  "description": "Agentic QA platform — Coverage + Onboarding + Triage running locally",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -18,13 +18,11 @@
     "db:migrate": "bash scripts/dev-migrate.sh",
     "db:seed": "tsx scripts/seed-dev-tenant.ts",
     "dev:up": "bash scripts/dev-up.sh",
+    "demo:reset": "bash scripts/demo-reset.sh",
     "test:rls": "npm run test -w @poc/rls-tests",
     "test:playwright": "playwright test",
     "eval": "npm run eval -w @poc/eval-harness",
-    "prompts:validate": "tsx -e \"import('@poc/prompts').then(m => m.validateAllPrompts().then(ms => console.log('✓', ms.length, 'prompts valid')))\"",
-    "loop": "bash scripts/loop.sh",
-    "loop:verify": "playwright test && node scripts/record-loop-state.js pass",
-    "loop:state": "bash scripts/loop-state.sh show"
+    "prompts:validate": "tsx -e \"import('@poc/prompts').then(m => m.validateAllPrompts().then(ms => console.log('✓', ms.length, 'prompts valid')))\""
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

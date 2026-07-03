@@ -1,4 +1,4 @@
-import { parseGeneratorOutput, type GeneratorParseResult, GeneratorParseError } from './generator-parse.js';
+import { parseGeneratorOutput, type GeneratorParseResult } from './generator-parse.js';
 
 export type HealParseResult =
   | { kind: 'patched'; files: GeneratorParseResult }
@@ -26,11 +26,6 @@ export function parseHealOutput(raw: string): HealParseResult {
     return { kind: 'refused', category, reason };
   }
 
-  try {
-    const files = parseGeneratorOutput(raw);
-    return { kind: 'patched', files };
-  } catch (err) {
-    if (err instanceof GeneratorParseError) throw err;
-    throw err;
-  }
+  const files = parseGeneratorOutput(raw);
+  return { kind: 'patched', files };
 }

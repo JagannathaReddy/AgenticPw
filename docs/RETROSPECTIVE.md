@@ -156,7 +156,8 @@ Numbers from actual runs during this session:
 | Prompts shipped | 7 (`explorer/` × 2, `generator/` × 2, `judge/`, `onboarding/` × 2) |
 | Postgres tables | 13 with RLS |
 
-Deferred but scaffolded: `packages/agent-server` (legacy POC), `test_file_embeddings` (pgvector), `convention-classifier.md` prompt.
+Deferred but scaffolded: `test_file_embeddings` (pgvector), `convention-classifier.md` prompt.
+(The legacy `packages/agent-server` POC was removed in the post-v0.2.0 cleanup.)
 
 ---
 

@@ -32,8 +32,6 @@ jobs:
         run: npx tsc -p apps/api/tsconfig.json --noEmit
       - name: Typecheck apps/worker
         run: npx tsc -p apps/worker/tsconfig.json --noEmit
-      - name: Typecheck agent-server (legacy)
-        run: npx tsc -p packages/agent-server/tsconfig.json --noEmit
 
   unit-tests:
     name: Unit tests (parser + verifier)

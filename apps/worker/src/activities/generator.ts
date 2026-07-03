@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type pg from 'pg';
 import { stringify as yamlStringify } from 'yaml';
@@ -208,5 +207,3 @@ function scopeToSubdir(originalPath: string, shortId: string): string {
   return path.join(top, 'autonomous', shortId, ...rest);
 }
 
-// Silence linter — retained for potential future use (unique manifest suffix).
-void randomUUID;

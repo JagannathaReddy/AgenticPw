@@ -1,138 +1,61 @@
-# Documentation
+# Documentation index
 
-Playwright Specialist POC — Loop Engineering for Cursor and VS Code Copilot, plus an optional Stagehand autonomous agent.
+**Current release:** `v0.2.0-triage`.
 
 ## Start here
 
 | Doc | When to read |
-|-----|----------------|
-| [../README.md](../README.md) | Install and quick start |
-| [LOOP-ENGINEERING.md](./LOOP-ENGINEERING.md) | **Required** — loop rules, phase prompts, templates |
-| [AUTONOMOUS-AGENT.md](./AUTONOMOUS-AGENT.md) | Stagehand daemon, auto-loop, API, env, operations |
-| [PLAN.md](./PLAN.md) | Platform plan and research (reference) |
+|-----|--------------|
+| [../README.md](../README.md) | Install, quick start, top-level layout |
+| [DEMO.md](./DEMO.md) | 4-part walkthrough with real output — coverage → onboarding → profile-driven coverage → heal |
+| [MILESTONE-STATUS.md](./MILESTONE-STATUS.md) | What shipped in v0.1.0 (Coverage + Onboarding) — real vs stub, KPIs, run book |
+| [MILESTONE-C.md](./MILESTONE-C.md) | What shipped in v0.2.0 (Triage) — safe/refuse taxonomy, 4-smoke matrix |
 
-## Overview
+## For sharing with QA leads
+
+| Doc | Purpose |
+|-----|---------|
+| [DEMO-SCRIPT.md](./DEMO-SCRIPT.md) | 5-minute rehearsable talk-track for the Loom |
+| [OUTREACH-KIT.md](./OUTREACH-KIT.md) | Pitch, DM variants, the 3 questions to ask |
+| [FEEDBACK-CAPTURE.md](./FEEDBACK-CAPTURE.md) | Per-conversation template + pattern doc after N=3 |
+| [feedback/](./feedback/) | Individual QA-lead notes go here |
+
+## Design references (v1 SaaS target)
+
+| Doc | Purpose |
+|-----|---------|
+| [Q1-TECHNICAL-DESIGN.md](./Q1-TECHNICAL-DESIGN.md) | Cloud target architecture — Temporal, WorkOS, multi-tenancy. Not needed for local dev; the design that v1 lifts to. |
+| [Q1-SEQUENCE-DIAGRAMS.md](./Q1-SEQUENCE-DIAGRAMS.md) | Mermaid sequence + state diagrams for the workflows |
+| [Q1-WEEK-BY-WEEK-PLAN.md](./Q1-WEEK-BY-WEEK-PLAN.md) | 13-week execution plan for the v1 target |
+
+## Retrospective
+
+| Doc | Purpose |
+|-----|---------|
+| [RETROSPECTIVE.md](./RETROSPECTIVE.md) | Honest post-mortem after v0.1.0 — real bugs, decisions that held, decisions to revisit |
+
+## Overview of what runs
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  IDE (Cursor / VS Code Copilot)                             │
-│  Planner → Generator → Healer + Loop Engineering docs       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ specs/*.md, tests/*.spec.ts
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Playwright (@playwright/test, CLI, MCP)                    │
-│  npm test · playwright.config.ts (env-driven)               │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-         ┌─────────────────┴─────────────────┐
-         ▼                                   ▼
-  .loop/ state                         Optional: agent-server
-  run-log, last-run                    Stagehand jobs → auto-loop
+CLI (`test-agent`)  ──►  Fastify API :3001  ──►  Postgres 16 (RLS)
+                                  │                       ▲
+                                  ▼                       │
+                          manifests (pending)             │
+                                  │                       │
+                                  ▼                       │
+                          Worker (poll)  ────────────────┘
+                                  │
+                 ┌────────────────┼────────────────┬─────────────────┐
+                 ▼                ▼                ▼                 ▼
+           Coverage flow    Onboarding flow   Triage flow       (future)
+           (Explorer→       (scan + extract)  (classify→snap→   Steward
+            Gen→Judge)                         heal→verify)     agent
+                 │                │                │
+                 ▼                ▼                ▼
+           Chromium + LLM shim (Anthropic/OpenAI)
+                 │                                 │
+                 ▼                                 ▼
+           local-artifacts/               tests/triaged/
 ```
 
-## Two workflows
-
-**Loop Engineering (IDE)** — human or IDE agents drive Plan → Generate → Run → Heal → Verify using specs and tests in this repo.
-
-**Autonomous agent (daemon)** — Stagehand executes open-ended browser goals; optional auto-loop writes specs, page objects, and tests under `specs/` and `tests/`.
-
-Both share the same verification bar: `npx playwright test` must pass before claiming done.
-
-## Stack
-
-| Layer | Technology |
-|-------|------------|
-| Test runner | `@playwright/test` |
-| Browser CLI | `@playwright/cli` (`.cursor/skills/playwright-cli/`) |
-| Test MCP | `npx playwright run-test-mcp-server` |
-| IDE agents | `.github/agents/*.md` (Copilot); `.cursor/rules/*.mdc` (Cursor) |
-| Loop orchestration | [LOOP-ENGINEERING.md](./LOOP-ENGINEERING.md) + `scripts/loop.sh` |
-| Autonomous agent | `packages/agent-server` (Stagehand + Fastify) |
-
-## IDE setup
-
-| | Cursor | VS Code + Copilot |
-|---|--------|-------------------|
-| Agent definitions | `.cursor/rules/playwright-*.mdc` | `.github/agents/playwright-test-*.agent.md` |
-| MCP | `.cursor/mcp.json` | `.vscode/mcp.json` |
-| Orchestration | `@playwright-specialist` skill | [.github/copilot-instructions.md](../.github/copilot-instructions.md) |
-| Init | Manual rules (no `--loop=cursor` in Playwright 1.58+) | `npx playwright init-agents --loop=copilot` |
-
-**Shared artifacts:** `specs/`, `tests/`, `docs/LOOP-ENGINEERING.md`, `.loop/`
-
-### Cursor
-
-1. MCP: `.cursor/mcp.json`
-2. Rules: `.cursor/rules/playwright-*.mdc`
-3. Skill: `@playwright-specialist`
-
-### VS Code + GitHub Copilot
-
-Copilot Chat → **Agent mode** → `playwright-test-planner` / `-generator` / `-healer`
-
-## Target application
-
-There is no bundled app. Tests and agent jobs target **your** application:
-
-- Pass an explicit URL per agent job, or set `AGENT_DEFAULT_URL`
-- For Playwright tests, set `PLAYWRIGHT_BASE_URL` and optionally `PLAYWRIGHT_WEB_SERVER_COMMAND`
-- `tests/seed.spec.ts` hits `https://playwright.dev/` so `npm test` works without a local server
-
-| Variable | Purpose |
-|----------|---------|
-| `PLAYWRIGHT_BASE_URL` | Optional `baseURL` for relative navigations |
-| `PLAYWRIGHT_WEB_SERVER_COMMAND` | Command to start your app before tests |
-| `PLAYWRIGHT_WEB_SERVER_URL` | URL to wait on (defaults to `PLAYWRIGHT_BASE_URL`) |
-
-## Agent server (optional)
-
-| Package | Role |
-|---------|------|
-| `packages/agent-server/src/worker.ts` | Stagehand `agent.execute()` |
-| `packages/agent-server/src/loop.ts` | Auto-bridge, generate, verify, heal |
-| `packages/agent-server/src/memory.ts` | Learned flows at `AGENT_LOOP_LEVEL=4` |
-
-Job artifacts: `.agent/jobs/` · Memory: `.agent/memory/` (both gitignored)
-
-```bash
-cp .env.example .env        # OPENAI_API_KEY; optional AGENT_DEFAULT_URL
-npm run agent:dev           # UI at http://127.0.0.1:3847/
-npm run agent:submit -- "Open the docs page. Expected: page title contains Playwright." "https://playwright.dev/"
-```
-
-Full API and env reference: [AUTONOMOUS-AGENT.md](./AUTONOMOUS-AGENT.md)
-
-## Directory layout
-
-| Path | Purpose |
-|------|---------|
-| `docs/` | Documentation (this file is the index) |
-| `specs/` | Markdown test plans (Planner / agent bridge) |
-| `tests/` | Playwright specs and `tests/pages/*.page.ts` page objects |
-| `scripts/` | `loop.sh`, `agent-cli.sh`, phase prompt helpers |
-| `packages/agent-server/` | Stagehand HTTP daemon |
-| `.loop/` | Loop iteration state (JSON gitignored) |
-| `.agent/` | Agent job and memory store (gitignored) |
-
-## npm scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm test` | Run Playwright tests |
-| `npm run loop` | Show next loop phase prompt |
-| `npm run loop:verify` | Run tests + record verify pass |
-| `npm run loop:state` | Show loop state |
-| `npm run agent:dev` | Start agent daemon (tsx) |
-| `npm run agent:build` | Compile agent-server |
-| `npm run agent:submit` | Submit a job via CLI |
-
-## Related repo files
-
-| Path | Role |
-|------|------|
-| `.github/copilot-instructions.md` | GitHub Copilot repo context |
-| `.cursor/skills/playwright-specialist/SKILL.md` | Cursor `@playwright-specialist` skill |
-| `.cursor/rules/playwright-*.mdc` | Cursor Planner / Generator / Healer rules |
-| `.github/agents/playwright-test-*.agent.md` | Copilot agent definitions |
-| `.env.example` | Agent daemon and Playwright env reference |
+Everything except Chromium runs in tsx dev processes. Two Node processes, one Docker container, no cloud.

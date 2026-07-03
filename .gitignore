@@ -1,7 +1,7 @@
 node_modules/
 dist/
 
-# Local artifacts + reports
+# Local artifacts + reports (never commit)
 local-artifacts/
 tests/autonomous/
 tests/triaged/
@@ -10,13 +10,6 @@ playwright-report/
 test-results/
 trace/
 *.zip
-
-# Legacy POC state (still in packages/agent-server)
-.loop/*.json
-.loop/goals.md
-.agent/jobs/
-.agent/memory/
-.agent/heal-snapshots/
 
 # Env + OS
 .env

@@ -205,11 +205,11 @@ export async function CoverageWorkflow(input: CoverageInput): Promise<CoverageOu
 
 ### 5.5 Worker agents (Temporal activities)
 
-**Explorer** — thin wrapper on Stagehand. Existing POC code in [`packages/agent-server/src/worker.ts`](../packages/agent-server/src/worker.ts) is the seed; refactor to strip the fixed pipeline and expose as a pure activity.
+**Explorer** — thin wrapper on Stagehand. See the local implementation in [`apps/worker/src/activities/explorer.ts`](../apps/worker/src/activities/explorer.ts).
 
 - Input: `{ url, goal, expectedOutcomes, sessionOptions }`
 - Output: `{ actions[], ariaSnapshot, verified, tracePath, videoPath, screenshots[] }`
-- Verified = every `expectedOutcome` appears in the final page's a11y tree (guardrail from [`agent-quality.ts`](../packages/agent-server/src/agent-quality.ts))
+- Verified = every `expectedOutcome` appears in the final page's a11y tree (see [`apps/worker/src/activities/verify-outcomes.ts`](../apps/worker/src/activities/verify-outcomes.ts))
 
 **Generator** — RAG + LLM.
 1. Query pgvector for k=3 tests most similar to `goal` (embedding of goal + repo profile summary)

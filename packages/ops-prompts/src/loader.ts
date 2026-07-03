@@ -92,6 +92,10 @@ export async function loadPrompt(opts: LoadPromptOptions): Promise<RenderedPromp
 
 /**
  * List every prompt file the loader can find, for CI validation.
+ *
+ * Skips:
+ *   - README.md / VERSIONING.md (documentation for this folder)
+ *   - anything under prompts/eval/ (eval corpus + schema, not prompts)
  */
 export async function listPromptFiles(root = resolvePromptsRoot()): Promise<string[]> {
   const results: string[] = [];
@@ -100,8 +104,13 @@ export async function listPromptFiles(root = resolvePromptsRoot()): Promise<stri
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === 'eval') continue;
         await walk(full);
-      } else if (entry.name.endsWith('.md') && !/^readme\.md$/i.test(entry.name) && !/^versioning\.md$/i.test(entry.name)) {
+      } else if (
+        entry.name.endsWith('.md') &&
+        !/^readme\.md$/i.test(entry.name) &&
+        !/^versioning\.md$/i.test(entry.name)
+      ) {
         results.push(full);
       }
     }
