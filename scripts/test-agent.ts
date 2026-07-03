@@ -156,9 +156,22 @@ function describeEvent(kind: string, p: Record<string, unknown>): string {
   if (category) bits.push(`category=${category}`);
 
   const reason = g<string>('reason');
-  if (reason) bits.push(`reason: ${String(reason).slice(0, 80)}`);
+  if (reason) bits.push(`reason: ${truncateReason(String(reason), 200)}`);
 
   return bits.join(' · ');
+}
+
+/**
+ * Truncate `text` to at most `max` chars, breaking on the last whitespace
+ * (or hyphen) rather than mid-word. Appends "…" when actually truncated.
+ */
+function truncateReason(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= max) return flat;
+  const slice = flat.slice(0, max);
+  const breakAt = Math.max(slice.lastIndexOf(' '), slice.lastIndexOf('-'));
+  const cut = breakAt > max * 0.6 ? breakAt : max;
+  return `${flat.slice(0, cut).trimEnd()}…`;
 }
 
 function printTerminal(m: AnyManifest): void {
@@ -204,8 +217,9 @@ function printTerminal(m: AnyManifest): void {
   if (r.category) process.stdout.write(`  category: ${String(r.category)}\n`);
   if (r.reason) {
     process.stdout.write(`  reason:\n`);
-    const lines = String(r.reason).split('\n').slice(0, 20);
-    for (const line of lines) process.stdout.write(`    ${line}\n`);
+    for (const line of String(r.reason).split('\n')) {
+      process.stdout.write(`    ${line}\n`);
+    }
   }
   process.stdout.write(`\nartifact:  local-artifacts/${m.id}/\n`);
 }
