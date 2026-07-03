@@ -8,6 +8,7 @@ import { classifyFailure } from '../activities/classify-failure.js';
 import { classifyWithLLM } from '../activities/classify-llm.js';
 import { captureA11ySnapshot, extractTargetUrl } from '../activities/capture-a11y.js';
 import { extractErrorText, runPlaywright } from '../activities/judge-runner.js';
+import { FsCache } from '../cache.js';
 import { withTenant } from '../db.js';
 import { manifestLogger } from '../logger.js';
 
@@ -263,7 +264,8 @@ export async function runTriage(
 
   if (targetUrl) {
     log.info({ stage: 'snapshot', targetUrl }, 'Capturing a11y snapshot');
-    const snap = await captureA11ySnapshot(targetUrl, deps.config.browserTimeoutMs, false);
+    const cache = new FsCache({ rootDir: deps.config.artifactsDir });
+    const snap = await captureA11ySnapshot(targetUrl, deps.config.browserTimeoutMs, false, cache);
     if (snap) {
       ariaSnapshotYaml = snap.yaml;
       a11yMeta = { url: snap.url, capturedAt: snap.capturedAt, durationMs: snap.durationMs };

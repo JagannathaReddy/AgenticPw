@@ -27,7 +27,7 @@ sleep 1
 echo "→ Dropping Postgres volume"
 docker compose down -v 2>&1 | tail -3
 
-echo "→ Removing generated tests and artifacts"
+echo "→ Removing generated tests, artifacts, and cache"
 rm -rf tests/autonomous tests/triaged local-artifacts test-results playwright-report
 
 echo "→ Starting fresh Postgres"

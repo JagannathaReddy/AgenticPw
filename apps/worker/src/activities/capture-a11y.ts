@@ -1,4 +1,7 @@
 import { chromium } from 'playwright';
+import { cacheKeys, FsCache } from '../cache.js';
+
+const SNAPSHOT_TTL_SEC = Number(process.env.SNAPSHOT_CACHE_TTL ?? 15 * 60);
 
 /**
  * Read the page.goto() target URL out of a Playwright spec or POM source.
@@ -40,12 +43,24 @@ function truncate(text: string, max = MAX_A11Y_CHARS): string {
  * Launch Chromium, navigate to `url`, capture the body's ARIA snapshot in
  * "ai" mode, and return it. On any failure, returns null instead of
  * throwing — the healer can still run without a snapshot.
+ *
+ * When an `FsCache` is passed, a fresh snapshot for the same URL within
+ * SNAPSHOT_CACHE_TTL (default 15 min) is served from disk instead of
+ * relaunching Chromium.
  */
 export async function captureA11ySnapshot(
   url: string,
   timeoutMs: number,
   headed = false,
+  cache?: FsCache,
 ): Promise<A11ySnapshot | null> {
+  const cacheKey = cacheKeys.ariaSnapshot(url);
+
+  if (cache && !cache.isDisabled()) {
+    const cached = await cache.get<A11ySnapshot>('snapshots', cacheKey);
+    if (cached) return cached;
+  }
+
   const started = Date.now();
   let browser: import('playwright').Browser | null = null;
   try {
@@ -53,12 +68,16 @@ export async function captureA11ySnapshot(
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     const raw = await page.locator('body').ariaSnapshot({ mode: 'ai' });
-    return {
+    const snap: A11ySnapshot = {
       url,
       yaml: truncate(raw),
       capturedAt: new Date().toISOString(),
       durationMs: Date.now() - started,
     };
+    if (cache) {
+      await cache.put('snapshots', cacheKey, snap, { ttlSeconds: SNAPSHOT_TTL_SEC });
+    }
+    return snap;
   } catch {
     return null;
   } finally {
