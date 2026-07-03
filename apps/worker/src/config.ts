@@ -14,6 +14,14 @@ export interface WorkerConfig {
 
   repoRoot: string;      // where generated test files land so Playwright can find them
   testTimeoutMs: number; // per-Judge Playwright run cap
+
+  /**
+   * Playwright project to pass as --project when running tests. Empty
+   * string means "let Playwright pick from its own config" — the right
+   * default for repos with a single browser project or a `dependencies`
+   * chain (e.g. auth-setup → chromium).
+   */
+  playwrightProject: string;
 }
 
 function req(name: string, fallback?: string): string {
@@ -76,5 +84,6 @@ export function loadConfig(): WorkerConfig {
 
     repoRoot: req('REPO_ROOT', process.cwd()),
     testTimeoutMs: Number(process.env.TEST_TIMEOUT_MS ?? 120_000),
+    playwrightProject: process.env.PLAYWRIGHT_PROJECT ?? '',
   };
 }

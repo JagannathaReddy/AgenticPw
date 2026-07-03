@@ -76,10 +76,22 @@ export function extractErrorText(json: PlaywrightSuiteJson | null): string {
   return parts.join('\n\n');
 }
 
+export interface RunPlaywrightOptions {
+  /**
+   * Playwright project name to pass as `--project`. When undefined, no
+   * `--project` flag is passed — Playwright uses the default project (or
+   * runs all projects) as its own config dictates.
+   *
+   * Common env override: PLAYWRIGHT_PROJECT.
+   */
+  project?: string | null;
+}
+
 export async function runPlaywright(
   repoRoot: string,
   testRelPath: string,
   timeoutMs: number,
+  options: RunPlaywrightOptions = {},
 ): Promise<PlaywrightRunResult> {
   return new Promise((resolve) => {
     const started = Date.now();
@@ -88,10 +100,23 @@ export async function runPlaywright(
       'test',
       testRelPath,
       '--reporter=json',
-      '--project=chromium',
       '--trace=on',
       '--workers=1',
     ];
+
+    // Resolve the project. Priority:
+    //   1. options.project (caller supplied)
+    //   2. PLAYWRIGHT_PROJECT env var
+    //   3. undefined → no --project flag → let Playwright default
+    //
+    // Passing an empty string in options.project explicitly opts out of the
+    // env fallback, matching what a repo with only one project or a chain
+    // of `dependencies` needs.
+    const project =
+      options.project === null || options.project === ''
+        ? undefined
+        : options.project ?? process.env.PLAYWRIGHT_PROJECT ?? undefined;
+    if (project) args.push(`--project=${project}`);
 
     const env: NodeJS.ProcessEnv = { ...process.env, CI: '1' };
     // Playwright inherits stdio and may pick up unrelated dotenv contents on

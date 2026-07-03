@@ -64,7 +64,9 @@ export async function runJudge(
   const specContent = await fs.readFile(specDst, 'utf8');
   const astCoverage = verifyOutcomes(specContent, input.expectedOutcomes);
 
-  const run = await runPlaywright(repoRoot, input.testPath, config.testTimeoutMs);
+  const run = await runPlaywright(repoRoot, input.testPath, config.testTimeoutMs, {
+    project: config.playwrightProject,
+  });
 
   await artifacts.put(
     `${input.manifestId}/judge-output.log`,

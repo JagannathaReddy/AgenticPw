@@ -120,7 +120,9 @@ export async function runTriage(
   const pageObjectPath = rawPagePath ?? (await guessPageObjectPath(repo.repoRoot, testPath));
 
   // ── 1. Baseline run ────────────────────────────────────────────────────
-  const baseline = await runPlaywright(repo.repoRoot, testPath, deps.config.testTimeoutMs);
+  const baseline = await runPlaywright(repo.repoRoot, testPath, deps.config.testTimeoutMs, {
+    project: deps.config.playwrightProject,
+  });
   log.info(
     {
       stage: 'baseline',
@@ -288,7 +290,9 @@ export async function runTriage(
   await fs.writeFile(pageAbs, heal.parse.files.pageObject.content);
 
   // ── 6. Verify the patched test passes ─────────────────────────────────
-  const verify = await runPlaywright(repo.repoRoot, patchedSpecRel, deps.config.testTimeoutMs);
+  const verify = await runPlaywright(repo.repoRoot, patchedSpecRel, deps.config.testTimeoutMs, {
+    project: deps.config.playwrightProject,
+  });
   log.info(
     {
       stage: 'verify',
