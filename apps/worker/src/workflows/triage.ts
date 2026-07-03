@@ -133,6 +133,18 @@ export async function runTriage(
     'Baseline run complete',
   );
 
+  // Persist baseline artifacts UNCONDITIONALLY, before any classification
+  // decision — so a rejection is debuggable from just `local-artifacts/<id>/`
+  // without needing to open Postgres.
+  await deps.artifacts.put(`${manifest.id}/baseline.stdout.log`, baseline.stdout);
+  await deps.artifacts.put(`${manifest.id}/baseline.stderr.log`, baseline.stderr);
+  if (baseline.json) {
+    await deps.artifacts.put(
+      `${manifest.id}/baseline.json`,
+      JSON.stringify(baseline.json, null, 2),
+    );
+  }
+
   await withTenant(deps.pool, tenant, async (client) => {
     await appendEvent(client, manifest, 'progress', null, null, {
       stage: 'baseline_done',
@@ -159,6 +171,23 @@ export async function runTriage(
       isSafeToHeal: classification.isSafeToHeal,
     },
     'Classified failure',
+  );
+
+  // Persist the full classification result too — the manifest_events row
+  // stores only the short `evidence`; the file has the full errorText and
+  // both haystacks the regexes ran against.
+  await deps.artifacts.put(
+    `${manifest.id}/classification.json`,
+    JSON.stringify(
+      {
+        ...classification,
+        errorTextLength: errorText.length,
+        errorTextTail: errorText.slice(-2000),
+        rawOutputTail: baseline.output.slice(-2000),
+      },
+      null,
+      2,
+    ),
   );
 
   await withTenant(deps.pool, tenant, async (client) => {
