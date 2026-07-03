@@ -48,6 +48,7 @@ function usage(): never {
 
 Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
+  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>]
   test-agent get <manifestId>
   test-agent list
 
@@ -173,6 +174,23 @@ function printTerminal(m: AnyManifest): void {
         process.stdout.write(`  confidence:  ${String(r.confidence)}\n`);
       if (r.filesSampled !== undefined)
         process.stdout.write(`  files:       ${String(r.filesSampled)}\n`);
+    } else if (role === 'triage' || m.goal?.kind === 'heal_test') {
+      if (r.alreadyPassing) {
+        process.stdout.write(`✓ Triage: test already passes — nothing to heal\n`);
+        if (r.testPath) process.stdout.write(`  test: ${String(r.testPath)}\n`);
+      } else {
+        process.stdout.write(`✓ Triage complete — patched test passes\n`);
+        if (r.category) process.stdout.write(`  category: ${String(r.category)}\n`);
+        if (r.patchedTestPath)
+          process.stdout.write(`  patched: ${String(r.patchedTestPath)}\n`);
+        if (r.originalTestPath)
+          process.stdout.write(`  original (unchanged): ${String(r.originalTestPath)}\n`);
+        process.stdout.write('\n');
+        if (r.patchedTestPath)
+          process.stdout.write(
+            `Compare:  diff ${String(r.originalTestPath)} ${String(r.patchedTestPath)}\n`,
+          );
+      }
     } else {
       process.stdout.write(`✓ Coverage complete\n`);
       if (r.testPath) process.stdout.write(`  spec:  ${String(r.testPath)}\n`);
@@ -333,6 +351,66 @@ async function initCommand(argv: string[]): Promise<void> {
   await watchManifest(submitted.manifestId);
 }
 
+interface HealArgs {
+  testPath: string;
+  pageObjectPath?: string;
+  repoRef?: string;
+}
+
+function parseHeal(argv: string[]): HealArgs {
+  let testPath = '';
+  let pageObjectPath: string | undefined;
+  let repoRef: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--page-object') pageObjectPath = argv[++i];
+    else if (a === '--help' || a === '-h') usage();
+    else if (a.startsWith('-')) {
+      process.stderr.write(`Unknown flag: ${a}\n`);
+      usage();
+    } else if (!testPath) testPath = a;
+    else {
+      process.stderr.write(`Unexpected positional: ${a}\n`);
+      usage();
+    }
+  }
+  if (!testPath) usage();
+  return { testPath, pageObjectPath, repoRef };
+}
+
+async function healCommand(argv: string[]): Promise<void> {
+  const args = parseHeal(argv);
+
+  let repoId: string | undefined;
+  if (args.repoRef) {
+    const resolved = await resolveRepoRef(args.repoRef);
+    repoId = resolved.id;
+    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})`);
+    process.stdout.write(resolved.hasProfile ? ` — profile ✓\n` : ` — no profile\n`);
+  }
+
+  process.stdout.write(`Submitting heal manifest…\n`);
+  process.stdout.write(`  test:  ${args.testPath}\n`);
+  if (args.pageObjectPath) process.stdout.write(`  page:  ${args.pageObjectPath}\n`);
+  process.stdout.write('\n');
+
+  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/heals', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      testPath: args.testPath,
+      ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
+      ...(repoId ? { repoId } : {}),
+    }),
+  });
+
+  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+
+  await watchManifest(submitted.manifestId);
+}
+
 async function reposCommand(): Promise<void> {
   const list = await apiCall<
     Array<{ id: string; name: string; localPath: string; status: string; profileId?: string }>
@@ -358,6 +436,8 @@ async function main(): Promise<void> {
       return getCommand(rest);
     case 'list':
       return listCommand();
+    case 'heal':
+      return healCommand(rest);
     case 'init':
       return initCommand(rest);
     case 'repos':

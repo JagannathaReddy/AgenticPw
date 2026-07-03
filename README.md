@@ -1,8 +1,8 @@
 # test-agent — Agentic QA platform (local dev)
 
-**Release:** `v0.1.0-local-q1` — see [docs/MILESTONE-STATUS.md](docs/MILESTONE-STATUS.md).
+**Release:** `v0.2.0-triage` — see [docs/MILESTONE-C.md](docs/MILESTONE-C.md) (previous: [v0.1.0](docs/MILESTONE-STATUS.md)).
 
-An AI teammate for existing Playwright suites. Describe a test in English → get a PR. Point it at a failing test → get a patch PR (Milestone C). Watch your suite → get a health report (M-D+).
+An AI teammate for existing Playwright suites. Describe a test in English → get code in your repo's style. Point it at a failing test → get a patched version that passes, or a clear refusal with a category. Watch your suite → get a health report (Milestone D, planned).
 
 **Today's scope:** v0 runs on your laptop. Postgres in Docker, Node processes on host, Playwright on host, real LLM APIs (Anthropic or OpenAI). The path to cloud is scoped in [docs/Q1-TECHNICAL-DESIGN.md](docs/Q1-TECHNICAL-DESIGN.md) — it's designed for, not needed for, this quick start.
 
@@ -44,9 +44,12 @@ npm run agent -- add \
   --outcome "Installation heading is visible" \
   --max-steps 4 \
   --repo <shortId>
+
+# When a test breaks — heal it (safe categories) or refuse (unsafe ones)
+npm run agent -- heal tests/foo.spec.ts --repo <shortId>
 ```
 
-Real Chromium opens. Real GPT-4o-mini writes code. Real Playwright runs it. `succeeded` in ~20 seconds. See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough with sample output.
+Real Chromium opens. Real GPT-4o-mini writes / heals code. Real Playwright runs it. `succeeded` in ~20 seconds. See [docs/DEMO.md](docs/DEMO.md) for the full 4-part walkthrough with sample output.
 
 ---
 

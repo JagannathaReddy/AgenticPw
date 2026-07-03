@@ -1,0 +1,199 @@
+# v0.2.0-triage — Delivery status
+
+Snapshot at end of Milestone C. Follows the same shape as [MILESTONE-STATUS.md](./MILESTONE-STATUS.md) but focused on Triage (heal failing tests).
+
+**Bottom line:** the platform can now heal a specific class of test failures autonomously, in about 20 seconds for well under a cent, and refuses to touch failures where a heal would be unsafe. The original file is never mutated — patched files land in a manifest-scoped subdir and the user gets a diff.
+
+---
+
+## What ships in v0.2.0-triage
+
+### Runnable additions
+
+| Command | What it does |
+|---------|--------------|
+| `test-agent heal <testPath>` | Submit a triage manifest for a failing spec |
+| `test-agent heal <testPath> --repo <shortId>` | Same, with repo profile injected into the heal prompt |
+| `test-agent heal <testPath> --page-object <path>` | Explicit POM path (otherwise auto-detected) |
+| `POST /v1/heals` | API endpoint the CLI calls |
+
+### New agent activities (real, not stubbed)
+
+| Activity | Tech | State |
+|----------|------|-------|
+| Classifier | Regex over Playwright JSON reporter's error text + raw output | Real, 14 unit tests, 4 categories detected |
+| A11y snapshot | Chromium launch → `ariaSnapshot({ mode: 'ai' })` on the target URL | Real, best-effort, non-blocking |
+| Healer | LLM shim + `prompts/healer/system.md` (Sonnet-family prompt) | Real, `===FILE:===` or `===REFUSE===` output shapes |
+| Triage workflow | Baseline → classify → snapshot → heal → verify | Real, per-phase events, never mutates the original |
+
+### Supporting infrastructure changes
+
+| Piece | State |
+|-------|-------|
+| `judge-runner.extractErrorText` — flatten JSON reporter to text | Real |
+| `capture-a11y.extractTargetUrl` — parse `page.goto('...')` from source | Real, 7 unit tests |
+| `capture-a11y.captureA11ySnapshot` — Chromium ARIA snapshot with timeout | Real, returns null on failure |
+| `RefusalCategory` type extended with `assertion_broken`, `infra` | Real |
+| Worker dispatches triage role | Real, single poll loop routes to coverage / onboarding / triage |
+| CLI shows role-aware terminal messages | Real, `✓ Triage complete` vs `✓ Triage: already passes` vs `✓ Coverage complete` |
+
+---
+
+## The 4-smoke matrix (observed behavior)
+
+Actual observed behavior from `docs/DEMO.md` walkthrough:
+
+| # | Failure kind | Category | Duration | Outcome | Heal cost |
+|---|--------------|----------|----------|---------|-----------|
+| 1 | `toHaveTitle(/wrong-regex/)` | `assertion_broken` | 19.6 s | Refused | — |
+| 2 | `getByRole(...).click()` with non-existent name | `locator_drift` | 19.6 s | **Healed** | $0.0015 |
+| 3 | `page.goto('http://localhost:9999/...')` | `infra` | 3.0 s | Refused | — |
+| 4 | Test already passes | — | 3.0 s | Succeeded (no LLM call) | $0 |
+
+All four correct. Refuse categories refuse fast; safe categories heal; the fast-path exits early without spending a token.
+
+---
+
+## The safe/refuse taxonomy
+
+Deliberately narrow at v0. Only the categories where a heal is provably safe get healed:
+
+### Safe to heal (do it)
+
+| Category | What it means | Detection pattern |
+|----------|--------------|-------------------|
+| `locator_drift` | The button moved / renamed / became ambiguous | `strict mode violation`, `resolved to N elements`, `Timeout ... waiting for ... getBy...`, `element is not attached to the DOM` |
+| `timing` | Race condition or slow wait | `Test timeout of Xms exceeded`, `Navigation timeout`, `networkidle timeout` |
+
+### Refuse to heal (safer to escalate)
+
+| Category | Why refuse | Detection pattern |
+|----------|-----------|-------------------|
+| `assertion_broken` | Fixing would require changing what the test verifies | `Expected pattern: ... Received string:`, `Expected value: ... Received:` |
+| `product_bug` | The app is broken; the test correctly detected it | 5xx status, uncaught JS TypeError in the target |
+| `infra` | Not our problem — target unreachable, browser crashed | `ECONNREFUSED`, `Protocol error`, `Target page ... was closed` |
+| `unknown` | We couldn't confidently classify — refuse by default | (nothing else matched) |
+
+The healer's own prompt also emits `===REFUSE===` when it sees things the classifier missed (e.g. the fix would require weakening a `toHaveText` to `toBeVisible`).
+
+**Refuse-by-default is a feature, not a limitation.** A silent bad heal is far worse than a rejection with a clear category.
+
+---
+
+## Architecture (Triage view)
+
+```
+CLI (`test-agent heal`)
+      │  POST /v1/heals
+      ▼
+API — insert manifest role='triage'  ──► Postgres
+                                         ▲
+Worker (poll loop) claims the manifest ──┘
+      │
+      ▼
+Triage workflow:
+   1. runPlaywright(spec) as-is         ← if passes, ship "already passing"
+   2. classifyFailure(errorText, output) ← extractErrorText(JSON) + raw stderr
+   3. if !safe → rejected(category)
+   4. captureA11ySnapshot(targetUrl)     ← best-effort, launches Chromium
+   5. runHeal(spec, POM, output, category, snapshot, profile) ← LLM call
+   6. parseHealOutput(response)         ← ===FILE:=== OR ===REFUSE===
+   7. write patched to tests/triaged/<shortId>/
+   8. runPlaywright(patched)            ← verify
+   9. succeeded / rejected
+```
+
+Every phase writes a `manifest_events` row. Every LLM call writes an `llm_calls` row with cost, tokens, latency, prompt hash. Original files under `tests/autonomous/…` are read-only during Triage.
+
+---
+
+## Real numbers
+
+Aggregated from Day 1 + Day 2 smoke runs:
+
+| Metric | Value |
+|--------|-------|
+| Median heal-path duration | 19.6 s |
+| Median refuse-path duration (infra) | 3.0 s |
+| Median already-passing duration | 3.0 s (single Playwright run) |
+| Heal cost with a11y snapshot (gpt-4o-mini) | ~$0.0015 |
+| Heal cost without a11y snapshot | ~$0.0006 |
+| Classifier unit tests | 14 / 14 pass |
+| A11y URL-extractor unit tests | 7 / 7 pass |
+| Categories correctly classified in smoke | 4 (locator + assertion + infra + already-passing) |
+| Files mutated in the target repo during heal | 0 (patches go to `tests/triaged/…`) |
+
+---
+
+## How to run
+
+Prereq: v0.1.0 setup is live (`docker compose up -d && npm run dev:up && npm run dev`).
+
+```bash
+# Basic heal
+npm run agent -- heal tests/foo.spec.ts
+
+# With repo profile for style-preserving locator picks
+npm run agent -- heal tests/foo.spec.ts --repo <shortId>
+
+# Explicit page object
+npm run agent -- heal tests/foo.spec.ts --page-object tests/pages/foo.page.ts --repo <shortId>
+```
+
+Manifest events + patched output:
+
+```bash
+# Diff the heal vs the original
+diff tests/autonomous/<shortId>/foo.spec.ts tests/triaged/<manifestShortId>/foo.spec.ts
+
+# Inspect the a11y snapshot the healer saw
+cat local-artifacts/<manifestId>/aria-snapshot.yaml
+
+# Query cost across all heals today
+docker exec test-agent-postgres psql -U platform -d platform -c \
+  "SELECT ROUND(SUM(cost_usd)::numeric, 4) FROM llm_calls
+   WHERE prompt_id = 'healer.system.v1' AND ts::date = CURRENT_DATE;"
+```
+
+---
+
+## What's stubbed / heuristic (deferred)
+
+| Item | Now (v0.2.0) | Later |
+|------|--------------|-------|
+| Classifier | Regex over error text | LLM-backed fallback when regex returns `unknown` |
+| A11y snapshot | Chromium on host, best-effort | Sandboxed browser pool with Egress Broker (v1) |
+| Diff surfacing | User runs `diff` themselves | GitHub PR with the heal as a comment/branch |
+| Heal-retry | Single attempt | Bounded retry (max 2) with different prompts if first heal doesn't verify |
+| Bulk heal from CI | Not shipped in v0.2.0 | `test-agent heal --from-ci <file>` (v0.2.1) |
+| Per-subdirectory profile lookup | Uses top-level RepoProfile | Match subdirectory rules from profile.locators.per_subdirectory |
+| Cross-file heals | Only the file passed to `heal` and its POM | Q2 — heal fixtures, base classes, shared utilities |
+
+---
+
+## Real bugs the platform caught during Day 1-2
+
+Cataloged in `docs/RETROSPECTIVE.md`, but calling out the Triage-specific ones:
+
+1. **Classifier read JSON structure not error text.** Day 1 `assertion_broken` fell through to `unknown`. Fixed by extracting `errors[].message + stack` from JSON reporter.
+2. **`.*` doesn't cross newlines.** Playwright's "Call log" between `Timeout` and `getBy` is multi-line. Fixed with `[\s\S]*?`.
+3. **Import de-dupe.** Adding a11y capture introduced a second `import fs from 'node:fs/promises'`. Caught on typecheck.
+
+---
+
+## What v0.2.0 unlocks
+
+The Q1 tech design's ship gate reads:
+
+> QA lead installs, connects a repo, describes a new test → PR in 10 min using team conventions.
+
+v0.1.0 hit the create side. v0.2.0 adds:
+
+> When a CI failure comes in, agent classifies it, heals safe categories, refuses unsafe ones — all without touching the original test file.
+
+The two together move the platform from "generate coverage" to "maintain coverage." The gap that remains vs. the full Q1 vision:
+- GitHub PR flow (v1)
+- Steward Agent — flake detection, weekly reports (Milestone D / Q2)
+- Multi-tenant SaaS (v1)
+
+Everything else works.

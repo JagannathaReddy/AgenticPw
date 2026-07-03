@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { devAuthHook } from './auth.js';
+import { registerHealsRoutes } from './routes/heals.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerReposRoutes } from './routes/repos.js';
 import { registerTestsRoutes } from './routes/tests.js';
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   registerHealthRoutes(app, db);
   registerReposRoutes(app, db);
   registerTestsRoutes(app, db);
+  registerHealsRoutes(app, db);
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'Shutting down API');

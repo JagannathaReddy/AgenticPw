@@ -74,10 +74,12 @@ export interface ManifestSuccessGate {
 export type RefusalCategory =
   | 'product_bug'
   | 'weakens_assertion'
+  | 'assertion_broken'
   | 'touches_payments'
   | 'touches_auth'
   | 'ambiguous_fix'
   | 'over_budget'
+  | 'infra'
   | 'unknown';
 
 export interface ManifestPolicy {

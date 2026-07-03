@@ -6,12 +6,14 @@ import type { CoverageManifestRow } from './workflows/coverage.js';
 import { runCoverage } from './workflows/coverage.js';
 import type { OnboardingManifestRow } from './workflows/onboarding.js';
 import { runOnboardingWorkflow } from './workflows/onboarding.js';
+import type { TriageManifestRow } from './workflows/triage.js';
+import { runTriage } from './workflows/triage.js';
 
 const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
 interface ClaimedManifest {
   id: string;
-  role: 'coverage' | 'onboarding';
+  role: 'coverage' | 'onboarding' | 'triage';
   org_id: string;
   workspace_id: string;
   goal: unknown;
@@ -23,7 +25,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
     const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role IN ('coverage', 'onboarding')
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -92,8 +94,14 @@ async function main(): Promise<void> {
           artifacts,
           config,
         });
-      } else {
+      } else if (claim.role === 'onboarding') {
         result = await runOnboardingWorkflow(claim as unknown as OnboardingManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else {
+        result = await runTriage(claim as unknown as TriageManifestRow, {
           pool,
           artifacts,
           config,

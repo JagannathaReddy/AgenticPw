@@ -53,6 +53,29 @@ function extractTracePath(json: PlaywrightSuiteJson | null): string | undefined 
   return undefined;
 }
 
+/**
+ * Flatten every `errors[].message` + `errors[].stack` in the JSON reporter
+ * output into a single newline-joined string. This is what the classifier
+ * regexes want — human-readable error text, not JSON structure.
+ */
+export function extractErrorText(json: PlaywrightSuiteJson | null): string {
+  if (!json) return '';
+  const parts: string[] = [];
+  for (const suite of json.suites ?? []) {
+    for (const spec of suite.specs ?? []) {
+      for (const t of spec.tests ?? []) {
+        for (const r of t.results ?? []) {
+          for (const err of r.errors ?? []) {
+            if (typeof err.message === 'string') parts.push(err.message);
+            if (typeof err.stack === 'string') parts.push(err.stack);
+          }
+        }
+      }
+    }
+  }
+  return parts.join('\n\n');
+}
+
 export async function runPlaywright(
   repoRoot: string,
   testRelPath: string,
