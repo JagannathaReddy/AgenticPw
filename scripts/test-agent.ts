@@ -258,10 +258,87 @@ async function emitDiffIfTriageSucceeded(m: AnyManifest): Promise<void> {
   }
 }
 
+/**
+ * Consume the SSE stream of manifest events. Falls back to the old polling
+ * loop when SSE isn't supported (older API server).
+ */
 async function watchManifest(id: string): Promise<void> {
-  const seen = new Set<string>();
   const startTime = Date.now();
+  const url = `${API_BASE}/v1/tests/${id}/events`;
 
+  let res: Response | null = null;
+  try {
+    res = await fetch(url, { headers: { Accept: 'text/event-stream' } });
+  } catch {
+    res = null;
+  }
+
+  if (!res || !res.ok || !res.body) {
+    // Fall through to polling (older server, network hiccup).
+    return watchManifestPolling(id, startTime);
+  }
+
+  const decoder = new TextDecoder();
+  const reader = res.body.getReader();
+  let buffer = '';
+
+  const printEvent = (payload: Record<string, unknown>): void => {
+    const kind = String(payload.kind ?? 'event');
+    const p = (payload.payload as Record<string, unknown> | undefined) ?? {};
+    const stage = (p.stage as string | undefined) ?? '';
+    const detail = describeEvent(kind, p);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1).padStart(5);
+    const label = stage ? `${kind} · ${stage}` : kind;
+    const suffix = detail ? ` — ${detail}` : '';
+    process.stdout.write(`  [${elapsed}s] ${label}${suffix}\n`);
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE frames: separated by \n\n
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+
+      let evName = 'message';
+      let data = '';
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event: ')) evName = line.slice(7).trim();
+        else if (line.startsWith('data: ')) data += line.slice(6);
+      }
+      if (!data) continue;
+
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(data) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      if (evName === 'manifest_event') {
+        printEvent(parsed);
+      } else if (evName === 'terminal') {
+        // Get the full manifest to feed printTerminal + emit diff.
+        const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
+        await emitDiffIfTriageSucceeded(m);
+        printTerminal(m);
+        process.exit(m.status === 'succeeded' ? 0 : 1);
+      }
+    }
+  }
+
+  // Stream closed without a terminal event — fall through to a final poll
+  // so we still print something.
+  return watchManifestPolling(id, startTime);
+}
+
+/** Legacy polling fallback (also used when SSE fails). */
+async function watchManifestPolling(id: string, startTime = Date.now()): Promise<void> {
+  const seen = new Set<string>();
   while (true) {
     const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
     for (const ev of m.events ?? []) {
