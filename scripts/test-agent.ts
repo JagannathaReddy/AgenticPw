@@ -56,6 +56,7 @@ Usage:
   test-agent repos
 
   test-agent doctor
+  test-agent cost [--since 24h|7d] [--repo <shortId>]
 
 Environment:
   TEST_AGENT_API   default http://127.0.0.1:3001
@@ -499,6 +500,11 @@ async function main(): Promise<void> {
     case 'doctor': {
       const { runDoctor } = await import('./doctor.js');
       const code = await runDoctor();
+      process.exit(code);
+    }
+    case 'cost': {
+      const { runCost } = await import('./cost.js');
+      const code = await runCost(rest);
       process.exit(code);
     }
     case undefined:
