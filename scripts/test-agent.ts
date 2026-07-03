@@ -55,6 +55,8 @@ Usage:
   test-agent init <local-path> [--name <name>]
   test-agent repos
 
+  test-agent doctor
+
 Environment:
   TEST_AGENT_API   default http://127.0.0.1:3001
 `,
@@ -494,6 +496,11 @@ async function main(): Promise<void> {
       return initCommand(rest);
     case 'repos':
       return reposCommand();
+    case 'doctor': {
+      const { runDoctor } = await import('./doctor.js');
+      const code = await runDoctor();
+      process.exit(code);
+    }
     case undefined:
     case '--help':
     case '-h':
