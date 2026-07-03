@@ -7,6 +7,8 @@ An AI teammate for existing Playwright suites. Describe a test in English → ge
 **Today's scope:** v0 runs on your laptop. Postgres in Docker, Node processes on host, Playwright on host, real LLM APIs (Anthropic or OpenAI). The path to cloud is scoped in [docs/Q1-TECHNICAL-DESIGN.md](docs/Q1-TECHNICAL-DESIGN.md) — it's designed for, not needed for, this quick start.
 
 Full walkthrough with A/B evidence: [docs/DEMO.md](docs/DEMO.md).
+Recording script for sharing with QA leads: [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md).
+Outreach + feedback capture: [docs/OUTREACH-KIT.md](docs/OUTREACH-KIT.md) · [docs/FEEDBACK-CAPTURE.md](docs/FEEDBACK-CAPTURE.md).
 Post-milestone retro: [docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md).
 
 ---
