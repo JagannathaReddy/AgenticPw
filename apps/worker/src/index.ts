@@ -61,8 +61,19 @@ async function main(): Promise<void> {
     if (restored > 0) logger.info({ restored }, 'Re-enqueued stale manifests');
   }
 
+  if (!config.llmApiKey) {
+    logger.warn(
+      'No LLM API key found (OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY). Explorer / Generator / Healer / Onboarding activities will fail. Set one in .env.',
+    );
+  }
+
   logger.info(
-    { pollIntervalMs: config.pollIntervalMs, model: config.llmModel },
+    {
+      pollIntervalMs: config.pollIntervalMs,
+      model: config.llmModel,
+      provider: config.llmModel.split('/')[0],
+      hasApiKey: Boolean(config.llmApiKey),
+    },
     'Worker ready, polling',
   );
 

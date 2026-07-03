@@ -22,12 +22,32 @@ function req(name: string, fallback?: string): string {
   return v;
 }
 
+/**
+ * Pick the LLM model to use.
+ *
+ * If the user set LLM_MODEL (or legacy AGENT_MODEL) explicitly, that wins.
+ * Otherwise choose a sensible default from the provider whose API key is
+ * actually present in the env — never emit an Anthropic model name when the
+ * user only has an OpenAI key (issue #4).
+ *
+ * Bare model names (no `provider/` prefix) get the provider prefixed based
+ * on which key is present.
+ */
 function resolveModel(raw: string | undefined): string {
-  const model = raw?.trim() || 'anthropic/claude-sonnet-4-5';
-  if (model.includes('/')) return model;
-  if (process.env.ANTHROPIC_API_KEY) return `anthropic/${model}`;
-  if (process.env.OPENAI_API_KEY) return `openai/${model}`;
-  return `anthropic/${model}`;
+  const trimmed = raw?.trim();
+  if (trimmed) {
+    if (trimmed.includes('/')) return trimmed;
+    if (process.env.ANTHROPIC_API_KEY) return `anthropic/${trimmed}`;
+    if (process.env.OPENAI_API_KEY) return `openai/${trimmed}`;
+    if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return `google/${trimmed}`;
+    // No key at all — leave the bare name; loadConfig() will surface the
+    // missing-key error at boot rather than here.
+    return trimmed;
+  }
+  if (process.env.OPENAI_API_KEY) return 'openai/gpt-4o-mini';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic/claude-sonnet-4-5';
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return 'google/gemini-1.5-flash';
+  return 'openai/gpt-4o-mini';
 }
 
 function resolveKey(): string {
