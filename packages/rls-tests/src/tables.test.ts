@@ -140,14 +140,10 @@ describe('system context', () => {
 
 describe('append-only guarantees', () => {
   it('manifest_events UPDATE is denied to app_user', async () => {
-    // Note: superuser can UPDATE. The test verifies the GRANT layer.
-    // In CI we connect as app_user; local we may connect as postgres.
+    // fx.connect() already `SET ROLE app_user`, so any UPDATE here runs
+    // through the GRANT layer as a real user would.
     const c = await fx.connect();
     try {
-      // Attempt UPDATE with system context — RLS allows it, but privilege
-      // should still be revoked for app_user. If we're superuser this test
-      // effectively verifies the GRANT is present on the role.
-      await c.query('SET ROLE app_user');
       let denied = false;
       try {
         await c.query(`UPDATE manifest_events SET kind = 'x' WHERE id = 1`);
@@ -155,7 +151,6 @@ describe('append-only guarantees', () => {
         denied = true;
       }
       assert.equal(denied, true);
-      await c.query('RESET ROLE');
     } finally {
       await c.end();
     }
@@ -164,7 +159,6 @@ describe('append-only guarantees', () => {
   it('audit_log DELETE is denied to app_user', async () => {
     const c = await fx.connect();
     try {
-      await c.query('SET ROLE app_user');
       let denied = false;
       try {
         await c.query('DELETE FROM audit_log WHERE id = 1');
@@ -172,7 +166,6 @@ describe('append-only guarantees', () => {
         denied = true;
       }
       assert.equal(denied, true);
-      await c.query('RESET ROLE');
     } finally {
       await c.end();
     }

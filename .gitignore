@@ -3,6 +3,7 @@ dist/
 
 # Local artifacts + reports
 local-artifacts/
+tests/autonomous/
 .eval-report.json
 playwright-report/
 test-results/

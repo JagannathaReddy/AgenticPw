@@ -1,8 +1,32 @@
 {
-  "note": "Placeholder baseline — first real baseline captured on Q1 W6 when the harness ships.",
-  "capturedAt": null,
-  "promptCommit": null,
+  "capturedAt": "2026-07-02T20:49:50.185Z",
+  "promptCommit": "58b0a07",
   "modelVersions": {},
-  "score": 0.0,
-  "triples": {}
+  "score": 0.5,
+  "triples": {
+    "coverage.checkout-add-items.v1": {
+      "passed": false,
+      "metrics": {}
+    },
+    "coverage.filter-price.v1": {
+      "passed": false,
+      "metrics": {}
+    },
+    "judge.outcome-verifier.happy.v1": {
+      "passed": false,
+      "metrics": {
+        "cost_usd": 0.00020894999999999998,
+        "latency_ms": 3104,
+        "judge_confidence": 0.9
+      }
+    },
+    "judge.outcome-verifier.missing-assertion.v1": {
+      "passed": true,
+      "metrics": {
+        "cost_usd": 0.0002088,
+        "latency_ms": 2345,
+        "judge_confidence": 0.9
+      }
+    }
+  }
 }

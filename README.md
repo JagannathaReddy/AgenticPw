@@ -1,21 +1,28 @@
 # test-agent — Agentic QA platform (local dev)
 
-An AI teammate for existing Playwright suites. Describe a test in English → get a PR. Point it at a failing test → get a patch PR (Q2). Watch your suite → get a health report (Q3).
+**Release:** `v0.1.0-local-q1` — see [docs/MILESTONE-STATUS.md](docs/MILESTONE-STATUS.md).
 
-**Today's scope:** v0 runs on your laptop. Postgres in Docker, Node processes on host, Playwright on host, real GitHub App (optional), real LLM APIs (optional). The path to cloud is scoped in [docs/Q1-TECHNICAL-DESIGN.md](docs/Q1-TECHNICAL-DESIGN.md) — it's designed for, not needed for, this quick start.
+An AI teammate for existing Playwright suites. Describe a test in English → get a PR. Point it at a failing test → get a patch PR (Milestone C). Watch your suite → get a health report (M-D+).
+
+**Today's scope:** v0 runs on your laptop. Postgres in Docker, Node processes on host, Playwright on host, real LLM APIs (Anthropic or OpenAI). The path to cloud is scoped in [docs/Q1-TECHNICAL-DESIGN.md](docs/Q1-TECHNICAL-DESIGN.md) — it's designed for, not needed for, this quick start.
+
+Full walkthrough with A/B evidence: [docs/DEMO.md](docs/DEMO.md).
+Post-milestone retro: [docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md).
 
 ---
 
 ## Quick start (5 minutes)
 
-**Prerequisites:** Node 22+, Docker, `jq` (for pretty output).
+**Prerequisites:** Node 22+, Docker, an `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
 ```bash
-# 1. Install deps
+# 1. Install deps + start Postgres + apply migrations + seed dev tenant
 npm install
-
-# 2. Start Postgres, apply migrations, seed a dev tenant
 npm run dev:up
+
+# 2. Paste your API key
+cp .env.example .env
+$EDITOR .env           # set OPENAI_API_KEY (or ANTHROPIC_API_KEY)
 
 # 3. Boot the API + worker (two processes, one command)
 npm run dev
@@ -24,20 +31,22 @@ npm run dev
 In another terminal:
 
 ```bash
-# Submit a manifest
-curl -s -X POST http://127.0.0.1:3000/v1/tests \
-  -H 'content-type: application/json' \
-  -d '{
-    "goal":"Add 3 items to cart and see the cart total match the sum",
-    "targetUrl":"https://demo-fixture.example.com/products",
-    "expectedOutcomes":["cart badge shows 3","cart total equals sum"]
-  }' | jq
+# Onboard the repo — extract a RepoProfile in ~12s / ~$0.001
+npm run agent -- init . --name my-repo
 
-# Watch it flow through pending → in_progress → succeeded
-curl -s http://127.0.0.1:3000/v1/tests | jq
+# Get its shortId
+npm run agent -- repos
+
+# Describe a test — get real Playwright code in your repo's style
+npm run agent -- add \
+  "Click Get Started on the Playwright home page and verify Installation heading is visible." \
+  --url https://playwright.dev/ \
+  --outcome "Installation heading is visible" \
+  --max-steps 4 \
+  --repo <shortId>
 ```
 
-Generated stubs land under `./local-artifacts/<manifest-id>/`. In v0 the Explorer/Generator/Judge activities are stubs that write placeholder files — real LLM + Stagehand wiring lands in Week 3 (see [docs/Q1-WEEK-BY-WEEK-PLAN.md](docs/Q1-WEEK-BY-WEEK-PLAN.md)).
+Real Chromium opens. Real GPT-4o-mini writes code. Real Playwright runs it. `succeeded` in ~20 seconds. See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough with sample output.
 
 ---
 

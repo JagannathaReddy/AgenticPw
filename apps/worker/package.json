@@ -11,9 +11,16 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@browserbasehq/stagehand": "^2.4.0",
     "@poc/prompts": "*",
     "@poc/types": "*",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "pino": "^9.5.0",
+    "playwright": "^1.52.0",
+    "yaml": "^2.5.0"
+  },
+  "optionalDependencies": {
+    "pino-pretty": "^11.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

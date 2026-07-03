@@ -70,10 +70,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS organizations_touch ON organizations;
 CREATE TRIGGER organizations_touch
   BEFORE UPDATE ON organizations
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+DROP TRIGGER IF EXISTS workspaces_touch ON workspaces;
 CREATE TRIGGER workspaces_touch
   BEFORE UPDATE ON workspaces
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

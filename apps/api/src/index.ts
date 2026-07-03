@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { devAuthHook } from './auth.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerReposRoutes } from './routes/repos.js';
 import { registerTestsRoutes } from './routes/tests.js';
 
 async function main(): Promise<void> {
@@ -16,6 +17,7 @@ async function main(): Promise<void> {
   app.addHook('onRequest', devAuthHook(config));
 
   registerHealthRoutes(app, db);
+  registerReposRoutes(app, db);
   registerTestsRoutes(app, db);
 
   const shutdown = async (signal: string) => {

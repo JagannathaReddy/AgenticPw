@@ -12,13 +12,14 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS manifests_workspace_role_status_idx
   ON manifests (workspace_id, role, status, created_at DESC);
 
 -- Recent activity in the UI ("what did the agent do in the last 24h?")
+-- Full index: partial predicates cannot use now() (STABLE, not IMMUTABLE).
 CREATE INDEX CONCURRENTLY IF NOT EXISTS manifest_events_recent_idx
-  ON manifest_events (workspace_id, ts DESC)
-  WHERE ts > (now() - interval '30 days');
+  ON manifest_events (workspace_id, ts DESC);
 
 -- LLM cost aggregation ("show me today's spend by model")
-CREATE INDEX CONCURRENTLY IF NOT EXISTS llm_calls_workspace_day_model_idx
-  ON llm_calls (workspace_id, date_trunc('day', ts), provider, model);
+-- Index raw ts; date_trunc(timestamptz) is STABLE and invalid in index keys.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS llm_calls_workspace_model_ts_idx
+  ON llm_calls (workspace_id, provider, model, ts DESC);
 
 -- Audit lookup by correlation id (incident triage)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS audit_log_org_correlation_idx

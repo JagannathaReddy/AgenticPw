@@ -42,11 +42,19 @@ CREATE INDEX IF NOT EXISTS repo_profiles_repo_idx ON repo_profiles (repo_id);
 CREATE INDEX IF NOT EXISTS repo_profiles_workspace_idx ON repo_profiles (workspace_id);
 
 -- Now that repo_profiles exists we can set the FK
-ALTER TABLE repositories
-  ADD CONSTRAINT repositories_profile_id_fk
-  FOREIGN KEY (profile_id) REFERENCES repo_profiles(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'repositories_profile_id_fk'
+  ) THEN
+    ALTER TABLE repositories
+      ADD CONSTRAINT repositories_profile_id_fk
+      FOREIGN KEY (profile_id) REFERENCES repo_profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- Trigger for touch
+DROP TRIGGER IF EXISTS repositories_touch ON repositories;
 CREATE TRIGGER repositories_touch
   BEFORE UPDATE ON repositories
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

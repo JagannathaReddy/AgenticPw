@@ -33,11 +33,13 @@ export async function withTenant<T>(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Postgres does not allow bound parameters in SET; use set_config with
+    // is_local=true (equivalent to SET LOCAL).
     if (ctx.systemContext) {
-      await client.query(`SET LOCAL app.system_context = 'true'`);
+      await client.query(`SELECT set_config('app.system_context', 'true', true)`);
     } else {
-      await client.query(`SET LOCAL app.org_id = $1`, [ctx.orgId]);
-      await client.query(`SET LOCAL app.workspace_id = $1`, [ctx.workspaceId]);
+      await client.query(`SELECT set_config('app.org_id', $1, true)`, [ctx.orgId]);
+      await client.query(`SELECT set_config('app.workspace_id', $1, true)`, [ctx.workspaceId]);
     }
     const result = await fn(client);
     await client.query('COMMIT');

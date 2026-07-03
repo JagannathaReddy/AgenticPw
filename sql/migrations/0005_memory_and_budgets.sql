@@ -32,6 +32,7 @@ CREATE INDEX IF NOT EXISTS memory_flows_workspace_idx
 CREATE INDEX IF NOT EXISTS memory_flows_repo_host_idx
   ON memory_flows (repo_id, host);
 
+DROP TRIGGER IF EXISTS memory_flows_touch ON memory_flows;
 CREATE TRIGGER memory_flows_touch
   BEFORE UPDATE ON memory_flows
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+DROP TRIGGER IF EXISTS budgets_touch ON budgets;
 CREATE TRIGGER budgets_touch
   BEFORE UPDATE ON budgets
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

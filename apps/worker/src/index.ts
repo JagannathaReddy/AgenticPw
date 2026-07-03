@@ -1,17 +1,29 @@
 import { loadConfig } from './config.js';
-import { createPool, withSystem, withTenant } from './db.js';
+import { createPool, withSystem } from './db.js';
 import { LocalFsStore } from './artifacts.js';
+import { logger } from './logger.js';
 import type { CoverageManifestRow } from './workflows/coverage.js';
 import { runCoverage } from './workflows/coverage.js';
+import type { OnboardingManifestRow } from './workflows/onboarding.js';
+import { runOnboardingWorkflow } from './workflows/onboarding.js';
 
 const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
-async function claimNext(pool: ReturnType<typeof createPool>): Promise<CoverageManifestRow | null> {
+interface ClaimedManifest {
+  id: string;
+  role: 'coverage' | 'onboarding';
+  org_id: string;
+  workspace_id: string;
+  goal: unknown;
+  audit: { correlationId: string };
+}
+
+async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedManifest | null> {
   return withSystem(pool, async (client) => {
-    const { rows } = await client.query<CoverageManifestRow>(
+    const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role = 'coverage'
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -20,7 +32,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<CoverageM
           SET status = 'assigned', updated_at = now()
          FROM picked
         WHERE m.id = picked.id
-        RETURNING m.id, m.org_id, m.workspace_id, m.goal, m.audit`,
+        RETURNING m.id, m.role, m.org_id, m.workspace_id, m.goal, m.audit`,
     );
     return rows[0] ?? null;
   });
@@ -44,14 +56,17 @@ async function main(): Promise<void> {
 
   if (RESET_STALE_ON_BOOT) {
     const restored = await resetStale(pool);
-    if (restored > 0) console.log(`[worker] Re-enqueued ${restored} stale manifest(s)`);
+    if (restored > 0) logger.info({ restored }, 'Re-enqueued stale manifests');
   }
 
-  console.log(`[worker] Ready. Polling every ${config.pollIntervalMs}ms.`);
+  logger.info(
+    { pollIntervalMs: config.pollIntervalMs, model: config.llmModel },
+    'Worker ready, polling',
+  );
 
   let shutdown = false;
   const stop = (signal: string) => {
-    console.log(`[worker] ${signal} — draining then exiting`);
+    logger.info({ signal }, 'Received signal, draining then exiting');
     shutdown = true;
   };
   process.on('SIGINT', () => stop('SIGINT'));
@@ -59,23 +74,43 @@ async function main(): Promise<void> {
 
   while (!shutdown) {
     try {
-      const manifest = await claimNext(pool);
-      if (!manifest) {
+      const claim = await claimNext(pool);
+      if (!claim) {
         await new Promise((r) => setTimeout(r, config.pollIntervalMs));
         continue;
       }
 
-      console.log(`[worker] Running manifest ${manifest.id}`);
-      await withTenant(
-        pool,
-        { orgId: manifest.org_id, workspaceId: manifest.workspace_id },
-        async (client) => {
-          const result = await runCoverage(client, manifest, { artifacts });
-          console.log(`[worker] ${manifest.id} → ${result.status}: ${result.message}`);
+      logger.info(
+        { manifestShortId: claim.id.slice(0, 8), role: claim.role },
+        'Claimed manifest',
+      );
+
+      let result: { status: string; message: string };
+      if (claim.role === 'coverage') {
+        result = await runCoverage(claim as unknown as CoverageManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else {
+        result = await runOnboardingWorkflow(claim as unknown as OnboardingManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      }
+
+      logger.info(
+        {
+          manifestShortId: claim.id.slice(0, 8),
+          role: claim.role,
+          status: result.status,
+          message: result.message,
         },
+        'Manifest finished',
       );
     } catch (err) {
-      console.error(`[worker] Error in poll loop:`, err);
+      logger.error({ err: (err as Error).message }, 'Error in poll loop');
       await new Promise((r) => setTimeout(r, config.pollIntervalMs));
     }
   }
@@ -85,6 +120,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(err);
+  logger.fatal({ err: (err as Error).message, stack: (err as Error).stack }, 'Worker crashed');
   process.exit(1);
 });

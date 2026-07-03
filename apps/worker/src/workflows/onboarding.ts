@@ -1,0 +1,184 @@
+import { randomUUID } from 'node:crypto';
+import type pg from 'pg';
+import type { ArtifactStore } from '../artifacts.js';
+import type { WorkerConfig } from '../config.js';
+import { runOnboarding } from '../activities/onboarding.js';
+import { withTenant } from '../db.js';
+import { manifestLogger } from '../logger.js';
+
+export interface OnboardingManifestRow {
+  id: string;
+  org_id: string;
+  workspace_id: string;
+  goal: {
+    kind: string;
+    description: string;
+    params: {
+      repoId: string;
+      localPath: string;
+    };
+  };
+  audit: { correlationId: string };
+}
+
+export interface OnboardingDeps {
+  pool: pg.Pool;
+  artifacts: ArtifactStore;
+  config: WorkerConfig;
+}
+
+/**
+ * OnboardingWorkflow — analyze a repo and persist a RepoProfile row.
+ *
+ * Terminal outcomes:
+ *   - succeeded: profile row inserted, repo_profiles.id set on repositories.profile_id,
+ *     repositories.status = 'review'
+ *   - rejected: LLM output couldn't be parsed as YAML
+ *   - failed: unexpected error
+ */
+export async function runOnboardingWorkflow(
+  manifest: OnboardingManifestRow,
+  deps: OnboardingDeps,
+): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
+  const goal = manifest.goal;
+  const tenant = { orgId: manifest.org_id, workspaceId: manifest.workspace_id };
+  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
+  const { repoId, localPath } = goal.params;
+
+  await withTenant(deps.pool, tenant, async (client) => {
+    await client.query(
+      `UPDATE manifests SET status = 'in_progress', started_at = now() WHERE id = $1`,
+      [manifest.id],
+    );
+    await appendEvent(client, manifest, 'progress', 'assigned', 'in_progress', {
+      stage: 'started',
+      workflow: 'onboarding',
+      repoId,
+      localPath,
+    });
+  });
+  log.info({ stage: 'started', repoId, localPath }, 'Onboarding started');
+
+  let extraction;
+  try {
+    extraction = await runOnboarding(
+      {
+        manifestId: manifest.id,
+        correlationId: manifest.audit.correlationId,
+        repoId,
+        localPath,
+      },
+      deps.artifacts,
+      deps.config,
+      deps.pool,
+      tenant,
+    );
+  } catch (err) {
+    const message = (err as Error).message;
+    log.warn({ stage: 'extractor', err: message }, 'Extractor failed');
+    return terminate(deps.pool, tenant, manifest, 'rejected', {
+      category: 'extractor_failed',
+      reason: message,
+    });
+  }
+
+  log.info(
+    {
+      stage: 'extractor',
+      confidence: extraction.confidence,
+      filesSampled: extraction.filesSampled,
+      fixturesSampled: extraction.fixturesSampled,
+      cost_usd: extraction.usage.costUSD,
+      tokens_in: extraction.usage.tokensInput,
+      tokens_out: extraction.usage.tokensOutput,
+      latency_ms: extraction.usage.latencyMs,
+    },
+    'Extractor done',
+  );
+
+  const profileId = randomUUID();
+  await withTenant(deps.pool, tenant, async (client) => {
+    await client.query(
+      `INSERT INTO repo_profiles
+         (id, repo_id, workspace_id, conventions, extractor_version, confidence)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
+      [
+        profileId,
+        repoId,
+        tenant.workspaceId,
+        JSON.stringify(extraction.profile),
+        extraction.extractorVersion,
+        extraction.confidence,
+      ],
+    );
+    await client.query(
+      `UPDATE repositories
+         SET profile_id = $1, status = 'review', onboarded_at = now()
+       WHERE id = $2`,
+      [profileId, repoId],
+    );
+    await appendEvent(client, manifest, 'progress', null, null, {
+      stage: 'profile_persisted',
+      profileId,
+      confidence: extraction.confidence,
+    });
+  });
+
+  return terminate(deps.pool, tenant, manifest, 'succeeded', {
+    profileId,
+    confidence: extraction.confidence,
+    filesSampled: extraction.filesSampled,
+    fixturesSampled: extraction.fixturesSampled,
+  });
+}
+
+async function terminate(
+  pool: pg.Pool,
+  tenant: { orgId: string; workspaceId: string },
+  manifest: OnboardingManifestRow,
+  status: 'succeeded' | 'rejected' | 'failed',
+  result: Record<string, unknown>,
+): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
+  await withTenant(pool, tenant, async (client) => {
+    await client.query(
+      `UPDATE manifests
+         SET status = $2, finished_at = now(), result = $3::jsonb
+       WHERE id = $1`,
+      [manifest.id, status, JSON.stringify({ status, ...result })],
+    );
+    await appendEvent(client, manifest, status, 'in_progress', status, result);
+  });
+  const message =
+    status === 'succeeded'
+      ? 'Onboarding complete'
+      : String((result as { reason?: string }).reason ?? status);
+  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
+  const level = status === 'succeeded' ? 'info' : 'warn';
+  log[level]({ status, category: (result as { category?: string }).category }, message);
+  return { status, message };
+}
+
+async function appendEvent(
+  client: pg.PoolClient,
+  manifest: OnboardingManifestRow,
+  kind: string,
+  fromStatus: string | null,
+  toStatus: string | null,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO manifest_events
+       (manifest_id, workspace_id, kind, from_status, to_status, actor, payload, correlation_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+    [
+      manifest.id,
+      manifest.workspace_id,
+      kind,
+      fromStatus,
+      toStatus,
+      'system:worker',
+      JSON.stringify(payload),
+      manifest.audit.correlationId,
+    ],
+  );
+}

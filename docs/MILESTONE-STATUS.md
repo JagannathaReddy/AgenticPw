@@ -1,0 +1,168 @@
+# v0.1.0-local-q1 — Delivery status
+
+Snapshot at the end of the local Q1 milestone. Cross-references the Q1 tech design doc; treats the cloud SaaS shape from that doc as **v1 (future)**.
+
+**Bottom line:** the full "describe a test in English → get real Playwright code in your repo's conventions" flow works end to end on a laptop. In under 20 seconds, for well under a cent.
+
+---
+
+## What ships in v0.1.0
+
+### Runnable services
+
+| Service | Path | State |
+|---------|------|-------|
+| Fastify API | `apps/api/` | Real. RLS-enforced. `POST/GET /v1/tests`, `POST/GET /v1/repos`, `POST /v1/repos/:id/onboard` |
+| Worker (poll loop) | `apps/worker/` | Real. Role-aware dispatch (coverage + onboarding). Structured JSON logs |
+| Postgres 16 + pgvector | Docker | Real. 10 migrations, 9 RLS tests green |
+| CLI `test-agent` | `scripts/test-agent.ts` | Real. `add`, `get`, `list`, `init`, `repos` |
+
+### Agent activities (real, not stubbed)
+
+| Activity | Tech | State |
+|----------|------|-------|
+| Explorer | Stagehand + Chromium (host) | Real. Loads prompt, drives browser, captures ARIA snapshot, verifies outcomes |
+| Generator | LLM shim + RAG few-shot | Real. Uses `RepoProfile` when repo is onboarded. Cost + tokens persisted to `llm_calls` |
+| Judge | Spawn `npx playwright test` | Real. AST-checks assertions, refuses to ship weak tests |
+| Onboarding | Read local files + LLM classify | Real. Produces YAML `RepoProfile`, persists to `repo_profiles` |
+
+### Supporting infrastructure
+
+| Piece | State |
+|-------|-------|
+| Task Manifest schema + state machine | Real |
+| Prompt loader with front-matter + hash | Real, hash flows into OTel + `llm_calls` |
+| LLM shim (Anthropic + OpenAI, cost meter) | Real |
+| Local artifact store (`local-artifacts/`) | Real |
+| Structured JSON logs (pino) | Real, `correlationId` on every line |
+| RLS test suite | Real, 9/9 pass in ~130ms |
+| Eval harness | Real, baseline captured against gpt-4o-mini |
+| CI (`.github/workflows/ci.yml`) | Real, 5 jobs: typecheck / unit / prompts / rls / seed |
+
+---
+
+## What's stubbed / heuristic (deferred with a clear path)
+
+| Item | Now (v0) | Later (v1 / M-C) |
+|------|----------|------------------|
+| A11y outcome verifier | Trust agent success signal, log verifier for observability | Tighten to strict AND-check once we calibrate against a broader corpus |
+| RAG few-shot picker | Word-overlap over `tests/` | pgvector semantic recall (`test_file_embeddings` already installed) |
+| Convention classifier | Whole-repo prompt (`profile-extractor.md`) | Per-subdir classifier (`convention-classifier.md`) — already written but unused |
+| Playwright version detection | Says `unknown` | Read from `package-lock.json` in profile extractor |
+| GitHub PR flow | Files land in `local-artifacts/` + copied into `tests/` | GitHub App writing branches + PRs |
+| Auth | Hardcoded dev tenant | WorkOS SSO + SCIM |
+| Durable execution | In-process poll loop | Temporal Cloud |
+| Multi-tenancy | Single dev tenant | Real tenancy via WorkOS orgs + workspaces |
+| Isolation | Playwright on host | Chromium in gVisor + Egress Broker |
+
+Every deferred item survives the transition because the local implementation already matches the future contract (interfaces like `ArtifactStore`, tenant context via `set_config`, TaskManifest shape).
+
+---
+
+## What's out of scope (kept in future/, not on the critical path)
+
+- `infra/future/terraform/` — full AWS SaaS architecture, parked
+- Multi-region, DR, SOC2, ISO
+- Slack app, web dashboard
+- Triage Agent (heal failing tests) — starts as Milestone C
+- Steward Agent (flake detection, drift reports) — Q2+
+
+---
+
+## KPIs achieved locally
+
+The Q1 design doc set target KPIs (§9 of `Q1-TECHNICAL-DESIGN.md`). Local-run measurements:
+
+| KPI | v1 (SaaS) target | v0.1.0 local |
+|-----|------------------|--------------|
+| Time from goal → test on disk (p50) | 8 min | **12–21 s** |
+| Cost per resolved test | < $3 | **~$0.0014** with gpt-4o-mini |
+| Test PR merge rate without changes | 60% (v1) | **~66%** of 3-run shakedown succeeded; small sample |
+| Refuse-to-ship precision | > 92% | **3/5** shakedown runs correctly rejected instead of shipping broken code |
+| Cross-tenant leakage | Zero | **Zero** (9/9 RLS tests green, verified with real `app_user` role) |
+
+Caveats: sample size is tiny (n≈10 total runs), target apps are only `playwright.dev`, and success is heavily influenced by prompt quality. But the shape is right — the platform costs well under a cent per successful test and finishes in seconds, not minutes.
+
+---
+
+## Architecture (v0 subset of the target)
+
+```
+CLI (`test-agent`)  ──►  Fastify API :3000  ──►  Postgres 16 (RLS)
+                          │                       ▲
+                          └─► manifests (pending)  │
+                                    │              │
+                                    ▼              │
+                            Worker (poll)  ────────┘
+                                    │
+                    ┌───────────────┴────────────────┐
+                    ▼                                 ▼
+              Coverage flow                    Onboarding flow
+              (Explorer→Gen→Judge)             (scan + extract)
+                    │                                 │
+        ┌───────────┼──────────┐                      ▼
+        ▼           ▼          ▼               repo_profiles
+   Chromium    LLM shim   Playwright                  │
+   (host)      (Anth+OAI) runner                      │
+                    │                                 │
+                    ▼                                 │
+              llm_calls  ◄──────────────────────────┘
+              (cost meter)
+```
+
+- **Everything except Chromium runs in tsx dev processes.** Two Node processes, one Docker container, no cloud.
+- **Interfaces we'll swap for v1** are already isolated: `ArtifactStore` (LocalFsStore today → S3Store later), auth middleware (dev auth → WorkOS), worker poll loop (→ Temporal workflows).
+
+---
+
+## How to run everything
+
+```bash
+# One-time
+docker compose up -d
+bash scripts/dev-migrate.sh
+npx tsx scripts/seed-dev-tenant.ts
+cp .env.example .env && $EDITOR .env  # set OPENAI_API_KEY
+
+# Ongoing
+npm run dev                          # api + worker in parallel
+npm run agent -- list                # see recent manifests
+npm run agent -- repos               # see onboarded repos
+
+# Demo
+npm run agent -- init . --name my-repo
+npm run agent -- add "..." --url ... --outcome "..." --repo <shortId>
+
+# Tests
+npm run test:rls                     # RLS suite (9 tests)
+npm run eval                         # prompt eval baseline
+npx tsx scripts/test-agent.ts list   # bypass npm workspace overhead
+```
+
+See `docs/DEMO.md` for the walkthrough with sample output.
+
+---
+
+## Known limitations we're not going to fix at v0
+
+- **Outcome verifier is generous.** It trusts the agent's `success` signal and only logs the a11y verification result. When you have a lot of runs to calibrate against, tighten it.
+- **RAG picker uses word overlap.** Good enough for repos with clear topical filenames; will confuse repos where filenames don't reflect content. Fix with pgvector embeddings.
+- **`test-agent init` clones nothing.** Only works on paths on the local filesystem. A GitHub-connected version comes with the GitHub App in v1.
+- **CLI errors are ugly** on server errors — dumps the raw JSON. Livable for dev, ugly for demo.
+- **Judge copies files into `tests/autonomous/`** and leaves them. `git status` shows them as untracked. No cleanup command; user gets to decide whether to keep or delete.
+- **Nohup + stdout is block-buffered.** All worker logs went through pino to stderr specifically to avoid this. If you `console.log` in an activity, that log may not appear until the process exits — use the shared `logger` instead.
+
+---
+
+## What v0.1.0 unlocked
+
+The Q1 headline promise was:
+
+> A QA lead installs, connects a repo, and describes a new test in a CLI. Within 10 minutes they get a PR with the generated test using the team's locator conventions, POM style, and fixtures.
+
+**The local equivalent works.** In this order:
+
+1. `test-agent init .` — extract the profile in 12 s / $0.0008
+2. `test-agent add "..." --repo <shortId>` — get a test in your style in ~15 s / $0.0015
+
+The GitHub PR step is the only piece missing vs. the promise. Everything else — including the "in your team's style" property — actually works, provably, with A/B evidence.

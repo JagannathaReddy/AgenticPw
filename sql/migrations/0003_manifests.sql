@@ -50,6 +50,7 @@ CREATE INDEX IF NOT EXISTS manifests_correlation_idx
 CREATE INDEX IF NOT EXISTS manifests_created_at_idx
   ON manifests (workspace_id, created_at DESC);
 
+DROP TRIGGER IF EXISTS manifests_touch ON manifests;
 CREATE TRIGGER manifests_touch
   BEFORE UPDATE ON manifests
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();

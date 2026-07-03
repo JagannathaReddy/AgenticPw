@@ -28,12 +28,25 @@ function requireEnv(name: string): string {
   return v;
 }
 
-export async function connectAsAppUser(): Promise<pg.Client> {
+/**
+ * Connect as the migrator (superuser) — used only for fixture setup which
+ * needs to bypass RLS to seed cross-tenant data.
+ */
+export async function connectSuper(): Promise<pg.Client> {
   const url = requireEnv('DATABASE_URL');
-  // Connect first as the migrator (superuser) so the setup can create rows;
-  // real tests should call setTenantContext after connect.
   const client = new Client({ connectionString: url });
   await client.connect();
+  return client;
+}
+
+/**
+ * Connect and immediately `SET ROLE app_user` so RLS is enforced for the
+ * remainder of the session. This is the connection every RLS assertion runs
+ * against.
+ */
+export async function connectAsAppUser(): Promise<pg.Client> {
+  const client = await connectSuper();
+  await client.query('SET ROLE app_user');
   return client;
 }
 
@@ -42,9 +55,9 @@ export async function setTenantContext(
   ctx: { orgId?: string; workspaceId?: string; system?: boolean },
 ): Promise<void> {
   await client.query('BEGIN');
-  if (ctx.orgId) await client.query(`SET LOCAL app.org_id = $1`, [ctx.orgId]);
-  if (ctx.workspaceId) await client.query(`SET LOCAL app.workspace_id = $1`, [ctx.workspaceId]);
-  if (ctx.system) await client.query(`SET LOCAL app.system_context = 'true'`);
+  if (ctx.orgId) await client.query(`SELECT set_config('app.org_id', $1, true)`, [ctx.orgId]);
+  if (ctx.workspaceId) await client.query(`SELECT set_config('app.workspace_id', $1, true)`, [ctx.workspaceId]);
+  if (ctx.system) await client.query(`SELECT set_config('app.system_context', 'true', true)`);
 }
 
 export async function clearTenantContext(client: pg.Client): Promise<void> {
@@ -57,7 +70,7 @@ async function createTenant(client: pg.Client, name: string): Promise<TestTenant
   const repoId = randomUUID();
   const manifestId = randomUUID();
 
-  await client.query(`SET LOCAL app.system_context = 'true'`);
+  await client.query(`SELECT set_config('app.system_context', 'true', true)`);
 
   await client.query(
     `INSERT INTO organizations (id, name, plan) VALUES ($1, $2, 'design_partner')`,
@@ -100,9 +113,11 @@ async function createTenant(client: pg.Client, name: string): Promise<TestTenant
 
 /**
  * Build a fresh pair of tenants A and B. Assumes migrations already applied.
+ * Uses a superuser connection for seed since RLS would otherwise block the
+ * cross-tenant inserts.
  */
 export async function buildFixture(): Promise<TestFixture> {
-  const setup = await connectAsAppUser();
+  const setup = await connectSuper();
   await setup.query('BEGIN');
   const a = await createTenant(setup, 'A');
   const b = await createTenant(setup, 'B');
@@ -120,10 +135,20 @@ export async function buildFixture(): Promise<TestFixture> {
     },
     async cleanup() {
       for (const c of opened) await c.end().catch(() => undefined);
-      const c = await connectAsAppUser();
-      await c.query(`SET LOCAL app.system_context = 'true'`);
-      await c.query(`DELETE FROM organizations WHERE id = ANY($1)`, [[a.orgId, b.orgId]]);
-      await c.end();
+      const c = await connectSuper();
+      // Delete in reverse FK dependency order — workspaces_org_id_fkey is
+      // NO ACTION so we can't just DELETE FROM organizations directly.
+      try {
+        const orgIds = [a.orgId, b.orgId];
+        await c.query(`DELETE FROM manifest_events WHERE workspace_id IN (SELECT id FROM workspaces WHERE org_id = ANY($1))`, [orgIds]);
+        await c.query(`DELETE FROM manifests WHERE org_id = ANY($1)`, [orgIds]);
+        await c.query(`DELETE FROM repo_profiles WHERE workspace_id IN (SELECT id FROM workspaces WHERE org_id = ANY($1))`, [orgIds]);
+        await c.query(`DELETE FROM repositories WHERE workspace_id IN (SELECT id FROM workspaces WHERE org_id = ANY($1))`, [orgIds]);
+        await c.query(`DELETE FROM workspaces WHERE org_id = ANY($1)`, [orgIds]);
+        await c.query(`DELETE FROM organizations WHERE id = ANY($1)`, [orgIds]);
+      } finally {
+        await c.end();
+      }
     },
   };
 }

@@ -12,7 +12,7 @@ import pg from 'pg';
 
 const url =
   process.env.DATABASE_URL ??
-  'postgres://platform:platform@127.0.0.1:5432/platform';
+  'postgres://platform:platform@127.0.0.1:5433/platform';
 const ORG_ID = process.env.DEV_ORG_ID ?? '00000000-0000-0000-0000-000000000000';
 const WORKSPACE_ID =
   process.env.DEV_WORKSPACE_ID ?? '00000000-0000-0000-0000-000000000001';

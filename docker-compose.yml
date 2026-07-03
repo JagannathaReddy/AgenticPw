@@ -12,7 +12,7 @@
 
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: test-agent-postgres
     restart: unless-stopped
     environment:
@@ -20,7 +20,8 @@ services:
       POSTGRES_PASSWORD: platform
       POSTGRES_DB: platform
     ports:
-      - '5432:5432'
+      # 5433 on host to avoid clashing with a native Postgres on 5432.
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test --loader tsx dist/*.test.js",
-    "test:src": "node --test --loader tsx src/*.test.ts",
+    "test": "npm run build && node --test dist/tables.test.js",
     "db:reset": "bash scripts/reset-db.sh",
     "clean": "rm -rf dist"
   },

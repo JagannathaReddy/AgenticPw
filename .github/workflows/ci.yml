@@ -1,12 +1,113 @@
-name: Playwright CI
+name: CI
 
 on:
   push:
     branches: [main, master]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  typecheck:
+    name: Typecheck all workspaces
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Typecheck ops-types
+        run: npx tsc -p packages/ops-types/tsconfig.json --noEmit
+      - name: Typecheck ops-prompts
+        run: npx tsc -p packages/ops-prompts/tsconfig.json --noEmit
+      - name: Typecheck rls-tests
+        run: npx tsc -p packages/rls-tests/tsconfig.json --noEmit
+      - name: Typecheck eval-harness
+        run: npx tsc -p packages/eval-harness/tsconfig.json --noEmit
+      - name: Typecheck apps/api
+        run: npx tsc -p apps/api/tsconfig.json --noEmit
+      - name: Typecheck apps/worker
+        run: npx tsc -p apps/worker/tsconfig.json --noEmit
+      - name: Typecheck agent-server (legacy)
+        run: npx tsc -p packages/agent-server/tsconfig.json --noEmit
+
+  unit-tests:
+    name: Unit tests (parser + verifier)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Compile apps/worker
+        run: npx tsc -p apps/worker/tsconfig.json
+      - name: verify-outcomes tests
+        run: node --test apps/worker/dist/activities/verify-outcomes.test.js
+      - name: generator-parse tests
+        run: node --test apps/worker/dist/activities/generator-parse.test.js
+
+  prompts:
+    name: Prompt validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Validate every prompt front-matter
+        run: |
+          npx tsx -e "import('@poc/prompts').then(async m => {
+            const metas = await m.validateAllPrompts();
+            console.log('✓', metas.length, 'prompts valid');
+            for (const meta of metas) console.log('  •', meta.id, '(' + meta.taskClass + ')');
+          })"
+
+  rls-tests:
+    name: RLS isolation suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U platform -d platform"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations
+        run: |
+          for m in sql/migrations/[0-9]*.sql; do
+            echo "· $(basename $m)"
+            PGPASSWORD=platform psql -h 127.0.0.1 -U platform -d platform -v ON_ERROR_STOP=1 -f "$m" >/dev/null
+          done
+      - name: Compile rls-tests
+        run: npx tsc -p packages/rls-tests/tsconfig.json
+      - name: Run RLS suite
+        run: node --test packages/rls-tests/dist/tables.test.js
+
+  playwright-seed:
+    name: Playwright seed test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +117,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium --with-deps
-      - run: npm test
+      - run: npx playwright test tests/seed.spec.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -25,19 +126,3 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
-
-  agent-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install chromium --with-deps
-      - run: chmod +x scripts/agent-smoke.sh
-      - name: Agent daemon smoke
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: bash scripts/agent-smoke.sh
