@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently -n api,worker -c cyan,magenta \"npm:dev -w @poc/api\" \"npm:dev -w @poc/worker\"",
     "agent": "tsx scripts/test-agent.ts",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @poc/types && npm run build -w @poc/prompts && npm run build -w @poc/eval-harness && npm run build -w @poc/rls-tests && npm run build -w @poc/api && npm run build -w @poc/worker",
     "typecheck": "tsc -b packages/ops-types packages/ops-prompts apps/api apps/worker",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
