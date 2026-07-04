@@ -1,4 +1,4 @@
--- 0001_orgs_and_workspaces.sql
+-- 20260702101401_orgs_and_workspaces.sql
 -- Root tenancy: organizations own workspaces; workspaces are the RLS boundary.
 -- IdP linkage lives on the organization (single WorkOS org per contract).
 

@@ -1,4 +1,4 @@
--- 0005_memory_and_budgets.sql
+-- 20260702101405_memory_and_budgets.sql
 -- Memory: learned locators + action patterns per (repo, goal-hash).
 -- Budgets: hard caps enforced pre-call by LLM Gateway.
 

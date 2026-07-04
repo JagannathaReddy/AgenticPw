@@ -4,7 +4,8 @@ Postgres 16 + pgvector, running in Docker (`docker compose up -d postgres`,
 container `test-agent-postgres`, host port 5433). Every migration is:
 
 - **Forward-only** — no `DOWN` migrations (they don't survive real-world rollback anyway)
-- **Numbered** — `NNNN_short_name.sql`; NNNN is monotonic, never re-used
+- **Timestamp-prefixed** — `YYYYMMDDHHMMSS_short_name.sql`; lexicographic order
+  is chronological order, and parallel branches can't collide on a sequence number
 - **Idempotent** — `CREATE TABLE IF NOT EXISTS`, `DROP POLICY IF EXISTS` + recreate, etc.
 - **RLS-enabled** for every tenant-scoped table
 
@@ -21,9 +22,9 @@ Two consequences to internalize before authoring:
    EXISTS` first.
 2. **Constraint-replacing migrations must stay supersets of later state.**
    A `DROP CONSTRAINT` + `ADD CONSTRAINT` (like the role-check migrations
-   0010/0011) is re-applied against rows created under newer constraints —
+   onboarding_role/improver_role) is re-applied against rows created under newer constraints —
    its allowed-value list has to include everything later migrations allow,
-   or the re-run fails. This bit us once; see the comment in 0010.
+   or the re-run fails. This bit us once; see the comment in onboarding_role.
 
 A tracked-state runner (node-pg-migrate style) is the known upgrade when
 this becomes painful — [RETROSPECTIVE.md](../../docs/RETROSPECTIVE.md)
@@ -31,21 +32,23 @@ records the lesson.
 
 ## Order of application
 
-| # | Name | Purpose |
-|---|------|---------|
-| 0001 | `orgs_and_workspaces.sql` | Root tenancy tables + IdP linkage |
-| 0002 | `repositories.sql` | Per-workspace repos + profile pointer |
-| 0003 | `manifests.sql` | Task manifest + events (event-sourced) |
-| 0004 | `llm_calls_and_audit.sql` | LLM usage log + append-only audit log |
-| 0005 | `memory_and_budgets.sql` | Learned flows + spend budgets |
-| 0006 | `rls_policies.sql` | All RLS + tenant context helpers + `app_user` grants |
-| 0007 | `pgvector_setup.sql` | vector extension + test-file embeddings |
-| 0008 | `performance_indexes.sql` | Composite indexes for the hot query paths |
-| 0009 | `repositories_local_path.sql` | Local-filesystem repos: nullable `github_repo_id`, `local_path` |
-| 0010 | `onboarding_role.sql` | +`onboarding` in the manifests role check |
-| 0011 | `improver_role.sql` | +`improver` in the manifests role check (#19) |
-| 0012 | `steward_runs.sql` | `suite_runs` + `test_results` for flake analysis (Milestone D) |
-| 0013 | `heal_feedback.sql` | Human verdicts on heals, feeds the healer prompt (#16) |
+| Timestamp | Name | Purpose |
+|-----------|------|---------|
+| 20260702101401 | `orgs_and_workspaces` | Root tenancy tables + IdP linkage |
+| 20260702101402 | `repositories` | Per-workspace repos + profile pointer |
+| 20260702101403 | `manifests` | Task manifest + events (event-sourced) |
+| 20260702101404 | `llm_calls_and_audit` | LLM usage log + append-only audit log |
+| 20260702101405 | `memory_and_budgets` | Learned flows + spend budgets |
+| 20260702101406 | `rls_policies` | All RLS + tenant context helpers + `app_user` grants |
+| 20260702101407 | `pgvector_setup` | vector extension + test-file embeddings |
+| 20260702101408 | `performance_indexes` | Composite indexes for the hot query paths |
+| 20260703085901 | `repositories_local_path` | Local-filesystem repos: nullable `github_repo_id`, `local_path` |
+| 20260703085902 | `onboarding_role` | +`onboarding` in the manifests role check |
+| 20260703085903 | `improver_role` | +`improver` in the manifests role check (#19) |
+| 20260704004800 | `steward_runs` | `suite_runs` + `test_results` for flake analysis (Milestone D) |
+| 20260704101500 | `heal_feedback` | Human verdicts on heals, feeds the healer prompt (#16) |
+
+Timestamps are the file's first-commit time. New migrations: use `date +%Y%m%d%H%M%S` at authoring time.
 
 ## Tenant context — how RLS works
 
@@ -80,7 +83,7 @@ revoked from `app_user` on `manifest_events`, `audit_log`, `suite_runs`,
 
 ## Migration authoring checklist
 
-- [ ] Filename follows `NNNN_snake_case.sql` and says what it touches
+- [ ] Filename follows `YYYYMMDDHHMMSS_snake_case.sql` and says what it touches
 - [ ] Safe to re-run against a live schema (see Runner above)
 - [ ] Every new table has RLS enabled (or explicitly justified as global)
 - [ ] Every RLS policy has an accompanying test in `packages/rls-tests/`

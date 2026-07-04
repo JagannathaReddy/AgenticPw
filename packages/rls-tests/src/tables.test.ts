@@ -172,7 +172,7 @@ describe('append-only guarantees', () => {
   });
 });
 
-describe('heal_feedback (0013)', () => {
+describe('heal_feedback', () => {
   it('A writes feedback; B cannot read it; UPDATE denied to app_user', async () => {
     const a = await fx.connect();
     let feedbackId: string;

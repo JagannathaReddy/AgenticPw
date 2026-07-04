@@ -1,4 +1,4 @@
--- 0002_repositories.sql
+-- 20260702101402_repositories.sql
 -- Onboarded GitHub repos + extracted style profile.
 -- One repo lives in exactly one workspace.
 

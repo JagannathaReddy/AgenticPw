@@ -1,4 +1,4 @@
--- 0003_manifests.sql
+-- 20260702101403_manifests.sql
 -- Task Manifest — the orchestration contract. Event-sourced state changes
 -- via manifest_events; manifests row is the current-state projection.
 
@@ -78,6 +78,6 @@ CREATE INDEX IF NOT EXISTS manifest_events_correlation_idx
   ON manifest_events (correlation_id) WHERE correlation_id IS NOT NULL;
 
 -- Guard: only inserts allowed on manifest_events. Enforced by revoking
--- UPDATE + DELETE at the role level in 0006_rls_policies.sql.
+-- UPDATE + DELETE at the role level in the rls_policies migration.
 
 COMMIT;

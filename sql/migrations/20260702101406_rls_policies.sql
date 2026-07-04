@@ -1,4 +1,4 @@
--- 0006_rls_policies.sql
+-- 20260702101406_rls_policies.sql
 -- Row-level security across every tenant-scoped table.
 -- Enforcement model:
 --   * App middleware sets  SET LOCAL app.workspace_id = '<uuid>'  before first query

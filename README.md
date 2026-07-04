@@ -145,7 +145,7 @@ When we swap dev auth for WorkOS in v1, the middleware changes; the RLS policies
 ## Where things live that surprised us
 
 - **Prompts are code.** [prompts/](prompts/) with YAML front-matter; loaded by [packages/ops-prompts](packages/ops-prompts/); hash goes into every LLM span and every generated artifact.
-- **RLS is enforced by Postgres, not by the app.** Every table has policies. See [sql/migrations/0006_rls_policies.sql](sql/migrations/0006_rls_policies.sql).
+- **RLS is enforced by Postgres, not by the app.** Every table has policies. See [sql/migrations/20260702101406_rls_policies.sql](sql/migrations/20260702101406_rls_policies.sql).
 - **The Task Manifest is the API between agents.** See [packages/ops-types/src/manifest.ts](packages/ops-types/src/manifest.ts).
 - **Activities are boring functions.** No Temporal in v0. When v1 arrives, wrap each function as a Temporal activity — same signature.
 

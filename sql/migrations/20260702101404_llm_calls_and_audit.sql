@@ -1,4 +1,4 @@
--- 0004_llm_calls_and_audit.sql
+-- 20260702101404_llm_calls_and_audit.sql
 -- Every LLM call is logged for cost + eval. Audit log is append-only and
 -- exported nightly to S3 with Object Lock (WORM).
 

@@ -1,4 +1,4 @@
--- 0011_improver_role.sql
+-- 20260703085903_improver_role.sql
 -- Add 'improver' to the manifests.role check constraint (enh #19).
 
 BEGIN;

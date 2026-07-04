@@ -1,4 +1,4 @@
--- 0007_pgvector_setup.sql
+-- 20260702101407_pgvector_setup.sql
 -- Install pgvector and add embedding columns for future semantic recall.
 -- Q1 installs but doesn't query — Q2's Generator uses it for RAG.
 

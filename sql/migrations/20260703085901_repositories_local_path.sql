@@ -1,4 +1,4 @@
--- 0009_repositories_local_path.sql
+-- 20260703085901_repositories_local_path.sql
 -- v0 dev supports repos that live on the local filesystem (no GitHub install)
 -- and therefore have no numeric github_repo_id. Make the column nullable and
 -- keep uniqueness only for rows that actually have an id (via partial index).

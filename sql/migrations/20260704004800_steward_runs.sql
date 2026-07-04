@@ -1,10 +1,10 @@
--- 0012_steward_runs.sql
+-- 20260704004800_steward_runs.sql
 -- Milestone D (Steward): per-test outcomes across repeated suite runs.
 --
 -- suite_runs   — one row per `npx playwright test` invocation the Steward made
 -- test_results — one row per (test, run); the flake analyzer reads these
 --
--- RLS follows the 0006 pattern: scope by workspace, system context bypasses.
+-- RLS follows the rls_policies pattern: scope by workspace, system context bypasses.
 -- Both tables are append-only for app_user, like manifest_events.
 
 BEGIN;

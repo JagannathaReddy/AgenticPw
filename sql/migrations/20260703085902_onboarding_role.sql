@@ -1,8 +1,8 @@
--- 0010_onboarding_role.sql
+-- 20260703085902_onboarding_role.sql
 -- Add 'onboarding' to the manifests.role check constraint.
 --
 -- Migrations here are re-applied wholesale on every dev-migrate, so this
--- list must stay a superset of every role that later migrations (0011+)
+-- list must stay a superset of every role that later migrations (improver_role onward)
 -- allow — otherwise re-running this file against a live DB fails on rows
 -- created under the newer constraint.
 

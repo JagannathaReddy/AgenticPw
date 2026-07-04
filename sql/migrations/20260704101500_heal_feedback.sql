@@ -1,4 +1,4 @@
--- 0013_heal_feedback.sql
+-- 20260704101500_heal_feedback.sql
 -- Sprint 3a (#16): human feedback on heal outcomes.
 --
 -- heal_feedback — one row per signal about a triage manifest's patch:
@@ -8,7 +8,7 @@
 -- eval harness can compute accept-rates per (category, prompt, model) even
 -- after prompts change.
 --
--- RLS follows the 0006 pattern: scope by workspace, system context bypasses.
+-- RLS follows the rls_policies pattern: scope by workspace, system context bypasses.
 -- Append-only for app_user, like manifest_events — feedback is a ledger,
 -- a changed mind is a new row (latest explicit row wins at query time).
 
