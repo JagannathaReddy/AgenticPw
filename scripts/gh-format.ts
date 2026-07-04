@@ -184,7 +184,7 @@ async function commentMarkdown(parent: GhParent, children: GhChild[]): Promise<s
   }
 
   out.push('---');
-  out.push('_Suggestions only — test-agent never pushes to your branch. See SECURITY-CI.md._');
+  out.push('_Suggestions only — test-agent never pushes to your branch. See docs/guides/SECURITY-CI.md._');
   return out.join('\n');
 }
 

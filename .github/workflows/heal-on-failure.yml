@@ -2,7 +2,7 @@
 #
 # Triggers:
 #   - pull_request touching tests/** — SAME-REPO branches only (fork PRs
-#     never see the LLM secret; see docs/SECURITY-CI.md)
+#     never see the LLM secret; see docs/guides/SECURITY-CI.md)
 #   - weekly schedule + manual dispatch
 #
 # Suggestions only: the heal action is dry-run, never pushes, never fails

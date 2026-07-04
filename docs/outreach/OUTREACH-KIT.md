@@ -1,6 +1,6 @@
 # Outreach kit — how to share the demo with 3–5 QA leads
 
-Everything below assumes the [DEMO-SCRIPT.md](./DEMO-SCRIPT.md) recording is done and uploaded. This is the sharing playbook.
+Everything below assumes the [DEMO-SCRIPT.md](../guides/DEMO-SCRIPT.md) recording is done and uploaded. This is the sharing playbook.
 
 The goal isn't to sell. The goal is to **learn what a real QA lead thinks after watching what already exists** — before you spend two more months building the next agent.
 

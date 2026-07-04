@@ -13,7 +13,7 @@ style that shipped v0.2.1 → v0.4.0.
 |---|------|-----|
 | 0.1 | Close issue #1 | Paste the closing comment from [ISSUE-DEFERRALS.md](./ISSUE-DEFERRALS.md) |
 | 0.2 | Mark #14/#16/#18 as roadmap | Paste the three deferral comments from the same doc |
-| 0.3 | Invite the second developer trial | The #1 reply already asks; [OUTREACH-KIT.md](./OUTREACH-KIT.md) has the pitch |
+| 0.3 | Invite the second developer trial | The #1 reply already asks; [OUTREACH-KIT.md](../outreach/OUTREACH-KIT.md) has the pitch |
 
 Nothing below strictly blocks on this, but 0.3 gates Sprint 2's priority call.
 
@@ -65,7 +65,7 @@ feature that suite's 5-layer helper structure wants. Validation beats more
 features.
 
 - Re-run on the same Windows machine + internal suite from issue #1.
-- Capture with [FEEDBACK-CAPTURE.md](./FEEDBACK-CAPTURE.md); file issues; fix
+- Capture with [FEEDBACK-CAPTURE.md](../outreach/FEEDBACK-CAPTURE.md); file issues; fix
   the quick ones as a `v0.5.1` patch batch (same playbook as v0.2.1).
 - **Decision gate:** what the trial complains about decides whether Sprint 3
   is #16 (heal quality) or #18 (CI mode). Don't pre-commit.
@@ -91,7 +91,7 @@ eval tag for the with/without proof.
 
 Picked by explicit call ("Start #18") right after 3a. Composite action
 `.github/actions/heal`, CLI `--format github`, dogfood workflow
-`heal-on-failure.yml`, [SECURITY-CI.md](./SECURITY-CI.md).
+`heal-on-failure.yml`, [SECURITY-CI.md](../guides/SECURITY-CI.md).
 
 1. Composite action: Postgres service container + migrations + seed on boot.
 2. CLI `--format=github-actions`: `::error` annotations + job-summary
@@ -107,9 +107,9 @@ Picked by explicit call ("Start #18") right after 3a. Composite action
 
 | Item | Where it's tracked |
 |------|--------------------|
-| Temporal, WorkOS, gVisor pool, GitHub App PR flow | `infra/future/`, [Q1-TECHNICAL-DESIGN.md](./Q1-TECHNICAL-DESIGN.md) (v1 cloud) |
+| Temporal, WorkOS, gVisor pool, GitHub App PR flow | `infra/future/`, [Q1-TECHNICAL-DESIGN.md](../design/Q1-TECHNICAL-DESIGN.md) (v1 cloud) |
 | pgvector semantic recall for RAG | installed, unused — revisit when generation quality plateaus |
-| Auto-quarantine flaky tests | needs #16's trust signal first ([MILESTONE-D.md](./MILESTONE-D.md)) |
+| Auto-quarantine flaky tests | needs #16's trust signal first ([MILESTONE-D.md](../milestones/v0.4.0-steward.md)) |
 | Scheduled weekly steward | cron locally; Temporal cron in v1 |
 
 ## Sequence at a glance

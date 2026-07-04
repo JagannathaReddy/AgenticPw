@@ -552,7 +552,7 @@ only fix the broken locator"` later, the re-run went **1/1 patched** with the
 assertion intact. Feedback (#16) fixed CI heal quality (#18) live.
 
 Wiring it up: see [SECURITY-CI.md](./SECURITY-CI.md) (key handling, $2 budget
-cap, fork-PR rules) and [heal-on-failure.yml](../.github/workflows/heal-on-failure.yml)
+cap, fork-PR rules) and [heal-on-failure.yml](../../.github/workflows/heal-on-failure.yml)
 for the dogfood workflow this repo runs on its own PRs.
 
 Broken suite → diagnosed → healed → verified green, ~3 minutes and $0.003

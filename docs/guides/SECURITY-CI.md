@@ -10,7 +10,7 @@ runner and calls a paid LLM API. Four things to get right before wiring it up.
 - **Fork PRs must never see it.** GitHub already withholds secrets from
   `pull_request` runs of forks; keep it that way:
   - use the plain `pull_request` trigger (like
-    [heal-on-failure.yml](../.github/workflows/heal-on-failure.yml) does), and
+    [heal-on-failure.yml](../../.github/workflows/heal-on-failure.yml) does), and
     guard the job with
     `github.event.pull_request.head.repo.full_name == github.repository`;
   - **never** switch the trigger to `pull_request_target` to "make secrets

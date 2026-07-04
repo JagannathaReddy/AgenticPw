@@ -1,61 +1,56 @@
 # Documentation index
 
-**Current release:** `v0.2.0-triage`.
+**Current release:** `v0.7.0-ci`. Start with the root [README](../README.md) for
+the quick start; come here for depth.
 
-## Start here
+## guides/ — living how-tos
 
-| Doc | When to read |
+| Doc | Read it when |
 |-----|--------------|
-| [../README.md](../README.md) | Install, quick start, top-level layout |
-| [DEMO.md](./DEMO.md) | 4-part walkthrough with real output — coverage → onboarding → profile-driven coverage → heal |
-| [MILESTONE-STATUS.md](./MILESTONE-STATUS.md) | What shipped in v0.1.0 (Coverage + Onboarding) — real vs stub, KPIs, run book |
-| [MILESTONE-C.md](./MILESTONE-C.md) | What shipped in v0.2.0 (Triage) — safe/refuse taxonomy, 4-smoke matrix |
+| [DEMO.md](guides/DEMO.md) | You want the full walkthrough of every flow, with real observed output (7 parts: coverage → onboarding → profile-driven coverage → heal → batch → feedback → CI) |
+| [DEMO-SCRIPT.md](guides/DEMO-SCRIPT.md) | You're recording a 5-minute demo for a QA lead |
+| [SECURITY-CI.md](guides/SECURITY-CI.md) | You're wiring the heal action into GitHub Actions (key handling, budget cap, fork-PR rules) |
 
-## For sharing with QA leads
+## planning/ — what's next
 
-| Doc | Purpose |
-|-----|---------|
-| [DEMO-SCRIPT.md](./DEMO-SCRIPT.md) | 5-minute rehearsable talk-track for the Loom |
-| [OUTREACH-KIT.md](./OUTREACH-KIT.md) | Pitch, DM variants, the 3 questions to ask |
-| [FEEDBACK-CAPTURE.md](./FEEDBACK-CAPTURE.md) | Per-conversation template + pattern doc after N=3 |
-| [feedback/](./feedback/) | Individual QA-lead notes go here |
+| Doc | Read it when |
+|-----|--------------|
+| [NEXT-PLAN.md](planning/NEXT-PLAN.md) | You want the post-Q1 roadmap and what shipped against it (Sprints 1/3a/3b ✅; Sprint 2 = developer trial, pending) |
+| [ISSUE-DEFERRALS.md](planning/ISSUE-DEFERRALS.md) | Historical record of issue-thread comments; everything once deferred has since shipped |
 
-## Design references (v1 SaaS target)
+## milestones/ — release snapshots (historical)
 
-| Doc | Purpose |
-|-----|---------|
-| [Q1-TECHNICAL-DESIGN.md](./Q1-TECHNICAL-DESIGN.md) | Cloud target architecture — Temporal, WorkOS, multi-tenancy. Not needed for local dev; the design that v1 lifts to. |
-| [Q1-SEQUENCE-DIAGRAMS.md](./Q1-SEQUENCE-DIAGRAMS.md) | Mermaid sequence + state diagrams for the workflows |
-| [Q1-WEEK-BY-WEEK-PLAN.md](./Q1-WEEK-BY-WEEK-PLAN.md) | 13-week execution plan for the v1 target |
+| Doc | Covers |
+|-----|--------|
+| [v0.1.0-coverage.md](milestones/v0.1.0-coverage.md) | Coverage + Onboarding — describe a test in English, get code |
+| [v0.2.0-triage.md](milestones/v0.2.0-triage.md) | Triage — heal failing tests or refuse safely |
+| [v0.4.0-steward.md](milestones/v0.4.0-steward.md) | Steward — suite health, flaky vs broken |
+| [RETROSPECTIVE.md](milestones/RETROSPECTIVE.md) | Honest post-mortem after v0.1.0 — what the plan got wrong |
 
-## Retrospective
+Later releases (v0.5.0-batch, v0.6.0-feedback, v0.7.0-ci) are documented as
+[DEMO.md](guides/DEMO.md) parts 5–7 and their git tags rather than separate
+snapshot docs.
 
-| Doc | Purpose |
-|-----|---------|
-| [RETROSPECTIVE.md](./RETROSPECTIVE.md) | Honest post-mortem after v0.1.0 — real bugs, decisions that held, decisions to revisit |
+## design/ — the Q1 design (reference)
 
-## Overview of what runs
+| Doc | Status |
+|-----|--------|
+| [Q1-TECHNICAL-DESIGN.md](design/Q1-TECHNICAL-DESIGN.md) | The original cloud-SaaS design. The **v0 scope note at the top is load-bearing**: what's built is the laptop-first re-scope; the cloud shape is the v1 target |
+| [Q1-SEQUENCE-DIAGRAMS.md](design/Q1-SEQUENCE-DIAGRAMS.md) | Mermaid sequence/state diagrams for every flow |
+| [Q1-WEEK-BY-WEEK-PLAN.md](design/Q1-WEEK-BY-WEEK-PLAN.md) | The original staffing/burndown plan (historical) |
 
-```
-CLI (`test-agent`)  ──►  Fastify API :3001  ──►  Postgres 16 (RLS)
-                                  │                       ▲
-                                  ▼                       │
-                          manifests (pending)             │
-                                  │                       │
-                                  ▼                       │
-                          Worker (poll)  ────────────────┘
-                                  │
-                 ┌────────────────┼────────────────┬─────────────────┐
-                 ▼                ▼                ▼                 ▼
-           Coverage flow    Onboarding flow   Triage flow       (future)
-           (Explorer→       (scan + extract)  (classify→snap→   Steward
-            Gen→Judge)                         heal→verify)     agent
-                 │                │                │
-                 ▼                ▼                ▼
-           Chromium + LLM shim (Anthropic/OpenAI)
-                 │                                 │
-                 ▼                                 ▼
-           local-artifacts/               tests/triaged/
-```
+## outreach/ — sharing + feedback
 
-Everything except Chromium runs in tsx dev processes. Two Node processes, one Docker container, no cloud.
+| Doc | Read it when |
+|-----|--------------|
+| [OUTREACH-KIT.md](outreach/OUTREACH-KIT.md) | You're sharing the demo with QA leads |
+| [FEEDBACK-CAPTURE.md](outreach/FEEDBACK-CAPTURE.md) | You're about to talk to a user and want comparable notes |
+| [feedback/](outreach/feedback/) | Per-conversation notes land here |
+
+## Co-located docs (not in this folder)
+
+- [prompts/README.md](../prompts/README.md) + [prompts/VERSIONING.md](../prompts/VERSIONING.md) — prompt authoring and rollout
+- [sql/migrations/README.md](../sql/migrations/README.md) — migration runner semantics + authoring checklist
+- [packages/eval-harness/README.md](../packages/eval-harness/README.md) — prompt eval corpus runner
+- [packages/rls-tests/README.md](../packages/rls-tests/README.md) — tenant-isolation test suite
+- [infra/future/README.md](../infra/future/README.md) — parked cloud Terraform

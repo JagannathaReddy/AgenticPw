@@ -1,6 +1,6 @@
 # Feedback capture — how to record what QA leads said
 
-One template per person. Use one file per conversation (`docs/feedback/2026-07-<date>-<initials>.md`), or drop them into a shared doc. The point is that after 3 conversations you can put them side-by-side and see the pattern.
+One template per person. Use one file per conversation (`docs/outreach/feedback/2026-07-<date>-<initials>.md`), or drop them into a shared doc. The point is that after 3 conversations you can put them side-by-side and see the pattern.
 
 Rules:
 - **Capture verbatim.** "Sounds cool" and "I'd install this today" are very different signals; paraphrasing loses that.
@@ -91,7 +91,7 @@ Rules:
 
 ## After 3 conversations — the pattern doc
 
-Create `docs/feedback/PATTERN-SUMMARY.md` and fill it in.
+Create `docs/outreach/feedback/PATTERN-SUMMARY.md` and fill it in.
 
 ```markdown
 ## After N=3 feedback conversations

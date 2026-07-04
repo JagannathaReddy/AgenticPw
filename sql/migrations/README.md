@@ -27,7 +27,7 @@ Two consequences to internalize before authoring:
    or the re-run fails. This bit us once; see the comment in onboarding_role.
 
 A tracked-state runner (node-pg-migrate style) is the known upgrade when
-this becomes painful — [RETROSPECTIVE.md](../../docs/RETROSPECTIVE.md)
+this becomes painful — [RETROSPECTIVE.md](../../docs/milestones/RETROSPECTIVE.md)
 records the lesson.
 
 ## Order of application

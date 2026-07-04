@@ -11,7 +11,7 @@
 # read the `patched` output if you want to act on it).
 #
 # Runs inside this repo's checkout (`uses: ./.github/actions/heal`).
-# Read docs/SECURITY-CI.md before wiring secrets.
+# Read docs/guides/SECURITY-CI.md before wiring secrets.
 
 name: test-agent heal
 description: Batch-heal failing Playwright specs and post the diffs as suggestions

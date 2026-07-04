@@ -1,18 +1,28 @@
-# test-agent — Agentic QA platform (local dev)
+# test-agent — an AI teammate for your Playwright suite
 
-**Release:** `v0.7.0-ci` — heal runs in GitHub Actions and posts verified diffs as PR suggestions (#18, see [docs/SECURITY-CI.md](docs/SECURITY-CI.md)). Previous: v0.6.0-feedback · v0.5.0-batch · [v0.4.0-steward](docs/MILESTONE-D.md) · [v0.3.0-dx] · [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
+Describe a test in English → get code in your repo's style. Point it at a
+failing test → get a verified patch, or a categorized refusal. Ask about your
+suite → get a health report that separates flaky from broken — then heal
+everything it flagged in one command, and rate the patches so the next heal
+is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 
-An AI teammate for existing Playwright suites. Describe a test in English → get code in your repo's style. Point it at a failing test → get a patched version that passes, or a clear refusal with a category (including `out_of_scope` when the fix lives in a helper class it can see but must not patch). Hand it a rough `codegen` draft → get it polished into your repo's conventions. Ask about your suite → get a health report that separates flaky from broken and names heal candidates.
+**Release:** `v0.7.0-ci` · previous tags: `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
-**Runs on a laptop.** Postgres in Docker, Node processes on host, Playwright on host, real LLM APIs (Anthropic or OpenAI). The path to cloud is scoped in [docs/Q1-TECHNICAL-DESIGN.md](docs/Q1-TECHNICAL-DESIGN.md) — it's designed for, not needed for, this quick start.
+## What it does
 
-- Full walkthrough with A/B evidence: [docs/DEMO.md](docs/DEMO.md)
-- Recording script for sharing with QA leads: [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md)
-- Outreach + feedback: [docs/OUTREACH-KIT.md](docs/OUTREACH-KIT.md) · [docs/FEEDBACK-CAPTURE.md](docs/FEEDBACK-CAPTURE.md)
-- Post-milestone retro: [docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md)
-- Doc index: [docs/README.md](docs/README.md)
+| Flow | Command | What you get |
+|------|---------|--------------|
+| **Coverage** | `agent add "<goal>" --url …` | A real Playwright spec + page object in your repo's conventions, verified green before it ships |
+| **Onboarding** | `agent init . --name my-repo` | A `RepoProfile` of your conventions (locator style, POM layout, naming) that every other flow consumes |
+| **Triage** | `agent heal tests/foo.spec.ts` | A dry-run diff that fixes `locator_drift`/`timing` failures — or a refusal (`product_bug`, `out_of_scope`, …) when a patch would hide a real bug |
+| **Improve** | `agent improve tests/rough.spec.ts` | A rough `codegen` draft polished into your conventions |
+| **Steward** | `agent steward` | Suite health from K repeated runs: healthy / flaky / always-failing, with heal candidates and trend deltas |
+| **Batch** | `agent batch --from-steward <id>` | Every flagged spec healed under one parent manifest with a hard cost cap |
+| **Feedback** | `agent feedback <id> --down --note "…"` | Human verdicts stored per repo and injected into the next heal's prompt; `apply` records a 👍 automatically |
 
----
+Everything is dry-run by default; `agent apply` is the only thing that touches
+your files. Every LLM call is metered (`agent cost`), every step is an event
+you can watch live over SSE.
 
 ## Quick start (5 minutes)
 
@@ -31,135 +41,137 @@ $EDITOR .env           # set OPENAI_API_KEY (or ANTHROPIC_API_KEY)
 npm run dev
 ```
 
-In another terminal:
+Then, in another terminal:
 
 ```bash
-# Onboard the repo — extract a RepoProfile in ~12 s / ~$0.001
-npm run agent -- init . --name my-repo
+npm run agent -- init . --name my-repo     # teach it your conventions (~12s, ~$0.001)
+npm run agent -- repos                     # grab the shortId
 
-# Get its shortId
-npm run agent -- repos
-
-# Describe a test — get real Playwright code in your repo's style
 npm run agent -- add \
   "Click Get Started on the Playwright home page and verify Installation heading is visible." \
   --url https://playwright.dev/ \
   --outcome "Installation heading is visible" \
-  --max-steps 4 \
   --repo <shortId>
+```
 
-# When a test breaks — heal it (safe categories) or refuse (unsafe ones).
-# Dry-run by default: you get a colored diff; nothing on disk changes.
+Real Chromium opens, a real LLM writes the code, real Playwright verifies it —
+`succeeded` in ~20 seconds. The full 7-part walkthrough with observed output is
+[docs/guides/DEMO.md](docs/guides/DEMO.md).
+
+## Everyday usage
+
+```bash
+# A test broke — get a verified fix as a dry-run diff
 npm run agent -- heal tests/foo.spec.ts --repo <shortId>
-# Failure lives in a helper class? Hand the healer extra files:
-npm run agent -- heal tests/foo.spec.ts --include 'src/helpers/**/*.ts'
-# Happy with the diff? Apply it:
-npm run agent -- apply <manifestId>
+npm run agent -- heal tests/foo.spec.ts --include 'src/helpers/**/*.ts'  # failure lives in a helper?
+npm run agent -- apply <manifestId>                                       # happy with the diff
 
-# Polish a rough `playwright codegen` draft into your repo's conventions
-npm run agent -- improve tests/rough.spec.ts --repo <shortId>
-
-# Environment acting up? One-shot health check of the whole stack:
-npm run agent -- doctor
-
-# What has the LLM cost you lately?
-npm run agent -- cost --since 7d
-
-# How healthy is the suite? Runs it 3× and separates flaky from broken
+# Suite hygiene: report → batch heal → apply all → prove it
 npm run agent -- steward --repo <shortId>
-
-# Heal everything the report flagged, then apply all verified patches
 npm run agent -- batch --from-steward <manifestId>
 npm run agent -- apply --batch <batchId>
 
-# Rate a heal — apply already records a 👍 for you; corrections teach the healer
+# Teach it: apply already records a 👍; corrections carry the signal
 npm run agent -- feedback <manifestId> --down --note "text is localized — use getByTestId"
-npm run agent -- feedback --stats        # accept-rates per category / prompt version
+npm run agent -- feedback --stats          # accept-rates per category / prompt version
+
+# Housekeeping
+npm run agent -- doctor                    # one-shot environment health check
+npm run agent -- cost --since 7d           # LLM spend ledger
+npm run agent -- list                      # recent manifests
 ```
 
-Real Chromium opens. Real GPT-4o-mini writes / heals code. Real Playwright runs it. `succeeded` in ~20 seconds. See [docs/DEMO.md](docs/DEMO.md) for the full 4-part walkthrough with sample output.
+## CI mode
 
----
+[`.github/actions/heal`](.github/actions/heal/action.yml) boots the whole
+stack on a GitHub runner, batch-heals a spec glob, and posts verified diffs as
+a PR comment — dry-run, suggestions only, budget-capped, never gates CI.
+[heal-on-failure.yml](.github/workflows/heal-on-failure.yml) dogfoods it on
+this repo (same-repo PRs touching `tests/**`, plus a weekly run). Wire your
+key per [docs/guides/SECURITY-CI.md](docs/guides/SECURITY-CI.md).
 
-## Layout
+## How it works
+
+Every job is a **Task Manifest** — an event-sourced row in Postgres:
+
+1. The CLI posts to the API (`POST /v1/tests|heals|improves|stewards|batches|feedback`); the API inserts a `manifests` row (`pending`)
+2. The worker claims it (`FOR UPDATE SKIP LOCKED`) and runs the role's workflow — every phase appends to `manifest_events`, every LLM call is metered into `llm_calls`
+3. Terminal state (`succeeded` / `rejected` / `failed`) lands with a `result` blob; the CLI streams progress over SSE
+
+Workflows: **Coverage** (Explorer → Generator → Judge), **Onboarding** (scan →
+classify → profile), **Triage** (baseline → classify → stack-walk helpers →
+feedback context → heal → verify), **Improve**, **Steward** (suite ×K → flake
+analysis → report), **Batch** (orchestrator running child triages inline with
+a cost gate). Sequence diagrams: [docs/design/Q1-SEQUENCE-DIAGRAMS.md](docs/design/Q1-SEQUENCE-DIAGRAMS.md).
+
+Three design choices worth knowing:
+
+- **Prompts are code.** Versioned in [prompts/](prompts/) with YAML
+  front-matter; the rendered hash lands in every LLM span. Changes are scored
+  by the [eval harness](packages/eval-harness/) against a golden corpus.
+- **Tenant isolation is enforced by Postgres, not the app.** Every table has
+  RLS policies ([sql/migrations/](sql/migrations/)); `npm run test:rls` proves it.
+- **Nothing unverified ships.** Generated tests must pass Playwright *and*
+  assert every expected outcome; heals must make the failing test pass; when
+  they can't, you get a category, not a guess.
+
+## Repository layout
 
 ```
 apps/
-  api/                 Fastify HTTP surface (POST /v1/tests, /v1/repos, /v1/heals,
-                       /v1/improves, /v1/stewards; SSE at GET /v1/tests/:id/events)
-  worker/              In-process poll loop dispatching Coverage / Onboarding /
-                       Triage / Improve / Steward
+  api/                 Fastify HTTP surface + SSE event stream
+  worker/              Poll loop dispatching the role workflows
 packages/
   ops-types/           Shared TypeScript: TaskManifest, RepoProfile, LLM contract
-  ops-prompts/         Prompt loader (YAML front-matter + Mustache render)
+  ops-prompts/         Prompt loader (YAML front-matter, fails on unbound vars)
   eval-harness/        Golden-corpus regression runner for prompt changes
-  rls-tests/           Postgres RLS isolation tests (9 tests, ~130ms)
-prompts/               Versioned prompts (system + user-template per role)
-  explorer/  generator/  healer/  improver/  judge/  classifier/  onboarding/  steward/  eval/
-sql/migrations/        Postgres schema — RLS-first, 13 migrations
-scripts/               dev-up.sh, db-migrate.sh, db-seed-dev-tenant.ts,
-                       test-agent.ts, doctor.ts, cost.ts, diff.ts, demo-reset.sh
-tests/                 Playwright suites (the seed test that ships)
-docs/                  Design docs, demo script, outreach kit
+  rls-tests/           Postgres tenant-isolation tests
+prompts/               Versioned prompts per role + eval corpus
+sql/migrations/        Postgres schema — RLS-first, timestamp-named migrations
+scripts/               CLI (test-agent.ts) + db-* lifecycle + dev-up/demo-reset
+tests/                 Playwright suites (seed spec; generated tests land here too)
+docs/                  guides/ · planning/ · milestones/ · design/ · outreach/
+.github/actions/heal/  Composite action for CI mode
 infra/future/          Terraform for the cloud v1 target — parked
 ```
 
-## npm scripts
+## Development
 
 | Command | What it does |
 |---------|--------------|
 | `npm run dev:up` | Start Postgres, apply migrations, seed dev tenant |
-| `npm run dev` | Start API (:3001) + worker in parallel with tsx watch |
-| `npm run agent` | Invoke the CLI (`add`, `heal`, `improve`, `steward`, `batch`, `apply`, `feedback`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
-| `npm run demo:reset` | Reset to clean recording state (see [DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md)) |
-| `npm run db:up` | Just start Postgres |
-| `npm run db:migrate` | Apply migrations to running Postgres |
-| `npm run db:reset` | ⚠ drop + reapply everything (destroys volume) |
-| `npm run db:seed` | Idempotently seed the dev tenant |
-| `npm run typecheck` | Typecheck the whole monorepo |
-| `npm run build` | Compile every workspace |
-| `npm run test:rls` | Run cross-tenant isolation tests |
-| `npm run test:playwright` | Run the Playwright suite (`tests/`) |
-| `npm run eval` | Run the prompt eval harness against `prompts/eval/corpus/` |
-| `npm run prompts:validate` | Parse every prompt front-matter; fails on malformed |
+| `npm run dev` | API (:3001) + worker with tsx watch |
+| `npm run agent` | The CLI (`add`, `heal`, `improve`, `steward`, `batch`, `apply`, `feedback`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
+| `npm run typecheck` / `npm run build` | Typecheck / compile every workspace |
+| `npm run test:rls` | Cross-tenant isolation tests |
+| `npm run test:playwright` | Run the Playwright suite |
+| `npm run eval` | Prompt eval harness vs `prompts/eval/corpus/` |
+| `npm run prompts:validate` | Parse every prompt front-matter |
+| `npm run db:migrate` / `db:seed` / `db:reset` | Migration lifecycle (reset ⚠ destroys the volume) |
+| `npm run demo:reset` | Clean state for recording |
 
-## Environment
+Worker unit tests run per-file: `node --test apps/worker/dist/activities/*.test.js`
+(after `npm run build`). CI runs typecheck, unit tests, prompt validation, and
+the RLS suite on every push — see [ci.yml](.github/workflows/ci.yml).
 
-Copy `.env.example` → `.env` and fill in what you need. Defaults work for DB + dev tenant. **You must set at least one of `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`** to run Coverage / Onboarding / Triage.
+**Environment:** copy `.env.example` → `.env`; defaults work for DB + dev
+tenant, you only must set one LLM key. The dev tenant is hardcoded but the RLS
+boundary is real — swapping in real auth (v1) changes middleware, not policies.
 
-## How manifests flow
+## Documentation
 
-1. CLI (`test-agent add / init / heal / improve`) → `POST /v1/tests | /v1/repos/:id/onboard | /v1/heals | /v1/improves` → API inserts a `manifests` row with `status = pending`
-2. Worker polls Postgres (`FOR UPDATE SKIP LOCKED`) → claims a manifest → sets `assigned`
-3. Role-based workflow runs: **Coverage** (Explorer → Generator → Judge), **Onboarding** (scan → LLM classify → persist profile), **Triage** (baseline → classify → stack-walk helpers → snapshot → heal → verify), **Improve** (read spec → LLM polish → verify), or **Steward** (run suite K× → persist per-test outcomes → flake analysis → health report) — every phase appends to `manifest_events`
-4. Terminal state (`succeeded` | `rejected` | `failed`) recorded on the manifest with a `result` JSON blob; the CLI watches live over SSE
-
-Full sequence diagrams in [docs/Q1-SEQUENCE-DIAGRAMS.md](docs/Q1-SEQUENCE-DIAGRAMS.md).
-
-## Multi-tenancy
-
-The dev tenant is hardcoded (`DEV_ORG_ID`, `DEV_WORKSPACE_ID` in `.env`), but the RLS boundary is real. Every DB session opens with `SET LOCAL app.workspace_id = ...`. To prove isolation: `npm run test:rls`.
-
-When we swap dev auth for WorkOS in v1, the middleware changes; the RLS policies do not.
-
-## Where things live that surprised us
-
-- **Prompts are code.** [prompts/](prompts/) with YAML front-matter; loaded by [packages/ops-prompts](packages/ops-prompts/); hash goes into every LLM span and every generated artifact.
-- **RLS is enforced by Postgres, not by the app.** Every table has policies. See [sql/migrations/20260702101406_rls_policies.sql](sql/migrations/20260702101406_rls_policies.sql).
-- **The Task Manifest is the API between agents.** See [packages/ops-types/src/manifest.ts](packages/ops-types/src/manifest.ts).
-- **Activities are boring functions.** No Temporal in v0. When v1 arrives, wrap each function as a Temporal activity — same signature.
-
-## CI mode
-
-`.github/actions/heal` boots the stack on a GitHub runner, batch-heals a
-spec glob, and posts verified diffs as a PR comment — dry-run, suggestions
-only, budget-capped. [heal-on-failure.yml](.github/workflows/heal-on-failure.yml)
-dogfoods it on this repo (same-repo PRs touching `tests/**`, plus a weekly
-run). Wire your key per [docs/SECURITY-CI.md](docs/SECURITY-CI.md).
+The [docs index](docs/README.md) maps everything. Shortcuts:
+[full demo](docs/guides/DEMO.md) ·
+[CI security](docs/guides/SECURITY-CI.md) ·
+[roadmap](docs/planning/NEXT-PLAN.md) ·
+[milestone snapshots](docs/milestones/) ·
+[original design](docs/design/Q1-TECHNICAL-DESIGN.md) ·
+[retrospective](docs/milestones/RETROSPECTIVE.md)
 
 ## What's *not* here yet
 
-- GitHub App PR flow (v1 — cloud deploy; the Action above is the local-first stepping stone)
-- Scheduled weekly Steward runs (the CI schedule covers heal; steward-in-CI is a small follow-up)
-- WorkOS SSO, Temporal Cloud, multi-tenancy (v1)
-- Sandboxed browser pool (v1 — Chromium in gVisor + Egress Broker)
+- GitHub App PR flow, WorkOS SSO, Temporal, sandboxed browser pool — the
+  cloud v1 target, scoped in [the design doc](docs/design/Q1-TECHNICAL-DESIGN.md)
+  and parked in [infra/future/](infra/future/)
+- Scheduled Steward runs in CI (the weekly CI job covers heal; steward-in-CI is a small follow-up)
+- pgvector semantic retrieval (installed, unused until generation quality needs it)

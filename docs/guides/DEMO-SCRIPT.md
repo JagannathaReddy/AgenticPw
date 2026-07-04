@@ -232,5 +232,5 @@ Then follow up with: "Which of those two would matter more to your team?" and li
 
 1. Watch it yourself once. If any scene is longer than the estimate, re-record the offender rather than the whole thing.
 2. Cover the video with a 10-word title: **"Agent that writes Playwright tests in your team's style."**
-3. Share via [OUTREACH-KIT.md](./OUTREACH-KIT.md).
-4. Log responses in [FEEDBACK-CAPTURE.md](./FEEDBACK-CAPTURE.md).
+3. Share via [OUTREACH-KIT.md](../outreach/OUTREACH-KIT.md).
+4. Log responses in [FEEDBACK-CAPTURE.md](../outreach/FEEDBACK-CAPTURE.md).

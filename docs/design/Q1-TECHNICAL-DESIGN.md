@@ -4,7 +4,7 @@
 >
 > **v0 (current):** the whole platform runs on a laptop against Docker Postgres, a real Playwright repo, and real LLM APIs. No AWS, no Temporal Cloud, no WorkOS, no Vault. See [../README.md](../README.md) for the local quick-start.
 >
-> **v1 (this document, "future"):** the SaaS shape below is where we take the platform once local end-to-end is proven. Sections marked *"Future — v1"* are parked (Terraform lives in [`infra/future/`](../infra/future/)).
+> **v1 (this document, "future"):** the SaaS shape below is where we take the platform once local end-to-end is proven. Sections marked *"Future — v1"* are parked (Terraform lives in [`infra/future/`](../../infra/future/)).
 >
 > **What survives the transition unchanged:** SQL schema + RLS, Task Manifest contract, prompts, memory schema, worker activity boundaries. Every cloud piece has a local swap behind an interface (`ArtifactStore`, `AuthProvider`, `WorkflowQueue`), so the v1 lift is component replacement, not a rewrite.
 >
@@ -205,11 +205,11 @@ export async function CoverageWorkflow(input: CoverageInput): Promise<CoverageOu
 
 ### 5.5 Worker agents (Temporal activities)
 
-**Explorer** — thin wrapper on Stagehand. See the local implementation in [`apps/worker/src/activities/explorer.ts`](../apps/worker/src/activities/explorer.ts).
+**Explorer** — thin wrapper on Stagehand. See the local implementation in [`apps/worker/src/activities/explorer.ts`](../../apps/worker/src/activities/explorer.ts).
 
 - Input: `{ url, goal, expectedOutcomes, sessionOptions }`
 - Output: `{ actions[], ariaSnapshot, verified, tracePath, videoPath, screenshots[] }`
-- Verified = every `expectedOutcome` appears in the final page's a11y tree (see [`apps/worker/src/activities/verify-outcomes.ts`](../apps/worker/src/activities/verify-outcomes.ts))
+- Verified = every `expectedOutcome` appears in the final page's a11y tree (see [`apps/worker/src/activities/verify-outcomes.ts`](../../apps/worker/src/activities/verify-outcomes.ts))
 
 **Generator** — RAG + LLM.
 1. Query pgvector for k=3 tests most similar to `goal` (embedding of goal + repo profile summary)
