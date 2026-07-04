@@ -139,6 +139,36 @@ async function resolveRepoRef(ref: string): Promise<{ id: string; name: string; 
   return { id: match.id, name: match.name, hasProfile: !!match.profileId };
 }
 
+
+/** Resolve --repo, print the standard repo line, return the uuid. */
+async function resolveRepoOption(
+  ref: string | undefined,
+  noProfileNote: string | null = ' — no profile',
+): Promise<string | undefined> {
+  if (!ref) return undefined;
+  const resolved = await resolveRepoRef(ref);
+  process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})`);
+  if (noProfileNote === null) process.stdout.write('\n');
+  else process.stdout.write(resolved.hasProfile ? ' — profile ✓\n' : `${noProfileNote}\n`);
+  return resolved.id;
+}
+
+/** POST a manifest, print its ids, then stream events to terminal state. */
+async function submitAndWatch(
+  apiPath: string,
+  body: Record<string, unknown>,
+  watchOpts: WatchOpts = {},
+): Promise<void> {
+  const submitted = await apiCall<{ manifestId: string; correlationId: string }>(apiPath, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+  await watchManifest(submitted.manifestId, watchOpts);
+}
+
 function describeEvent(kind: string, p: Record<string, unknown>): string {
   const bits: string[] = [];
   const g = <T>(k: string): T | undefined => p[k] as T | undefined;
@@ -462,13 +492,7 @@ async function watchManifestPolling(
 async function addCommand(argv: string[]): Promise<void> {
   const args = parseAdd(argv);
 
-  let repoId: string | undefined;
-  if (args.repoRef) {
-    const resolved = await resolveRepoRef(args.repoRef);
-    repoId = resolved.id;
-    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})`);
-    process.stdout.write(resolved.hasProfile ? ` — profile ✓\n` : ` — no profile (heuristic will be used)\n`);
-  }
+  const repoId = await resolveRepoOption(args.repoRef, ' — no profile (heuristic will be used)');
 
   process.stdout.write(`Submitting manifest…\n`);
   process.stdout.write(`  goal:  ${args.goal}\n`);
@@ -479,22 +503,13 @@ async function addCommand(argv: string[]): Promise<void> {
   }
   process.stdout.write('\n');
 
-  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/tests', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      goal: args.goal,
-      targetUrl: args.url,
-      expectedOutcomes: args.outcomes,
-      ...(args.maxSteps !== undefined ? { maxSteps: args.maxSteps } : {}),
-      ...(repoId ? { repoId } : {}),
-    }),
+  await submitAndWatch('/v1/tests', {
+    goal: args.goal,
+    targetUrl: args.url,
+    expectedOutcomes: args.outcomes,
+    ...(args.maxSteps !== undefined ? { maxSteps: args.maxSteps } : {}),
+    ...(repoId ? { repoId } : {}),
   });
-
-  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
-  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
-
-  await watchManifest(submitted.manifestId);
 }
 
 async function getCommand(argv: string[]): Promise<void> {
@@ -675,13 +690,7 @@ function parseHeal(argv: string[]): HealArgs {
 async function healCommand(argv: string[]): Promise<void> {
   const args = parseHeal(argv);
 
-  let repoId: string | undefined;
-  if (args.repoRef) {
-    const resolved = await resolveRepoRef(args.repoRef);
-    repoId = resolved.id;
-    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})`);
-    process.stdout.write(resolved.hasProfile ? ` — profile ✓\n` : ` — no profile\n`);
-  }
+  const repoId = await resolveRepoOption(args.repoRef);
 
   process.stdout.write(`Submitting heal manifest…\n`);
   process.stdout.write(`  test:  ${args.testPath}\n`);
@@ -690,22 +699,14 @@ async function healCommand(argv: string[]): Promise<void> {
     process.stdout.write(`  include: ${args.includeGlobs.join(', ')}\n`);
   process.stdout.write('\n');
 
-  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/heals', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+  await submitAndWatch(
+    '/v1/heals',
+    {
       testPath: args.testPath,
       ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
       ...(repoId ? { repoId } : {}),
       ...(args.includeGlobs.length > 0 ? { includeGlobs: args.includeGlobs } : {}),
-    }),
-  });
-
-  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
-  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
-
-  await watchManifest(
-    submitted.manifestId,
+    },
     args.format === 'github' ? { onTerminal: githubTerminalHook() } : {},
   );
 }
@@ -713,33 +714,18 @@ async function healCommand(argv: string[]): Promise<void> {
 async function improveCommand(argv: string[]): Promise<void> {
   const args = parseHeal(argv); // same shape: <testPath> [--repo] [--page-object]
 
-  let repoId: string | undefined;
-  if (args.repoRef) {
-    const resolved = await resolveRepoRef(args.repoRef);
-    repoId = resolved.id;
-    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})`);
-    process.stdout.write(resolved.hasProfile ? ` — profile ✓\n` : ` — no profile\n`);
-  }
+  const repoId = await resolveRepoOption(args.repoRef);
 
   process.stdout.write(`Submitting improve manifest…\n`);
   process.stdout.write(`  test:  ${args.testPath}\n`);
   if (args.pageObjectPath) process.stdout.write(`  page:  ${args.pageObjectPath}\n`);
   process.stdout.write('\n');
 
-  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/improves', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      testPath: args.testPath,
-      ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
-      ...(repoId ? { repoId } : {}),
-    }),
+  await submitAndWatch('/v1/improves', {
+    testPath: args.testPath,
+    ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
+    ...(repoId ? { repoId } : {}),
   });
-
-  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
-  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
-
-  await watchManifest(submitted.manifestId);
 }
 
 async function stewardCommand(argv: string[]): Promise<void> {
@@ -760,28 +746,14 @@ async function stewardCommand(argv: string[]): Promise<void> {
     process.exit(2);
   }
 
-  let repoId: string | undefined;
-  if (repoRef) {
-    const resolved = await resolveRepoRef(repoRef);
-    repoId = resolved.id;
-    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})\n`);
-  }
+  const repoId = await resolveRepoOption(repoRef, null);
 
   process.stdout.write(`Submitting steward manifest (${runs ?? 3} full-suite runs)…\n\n`);
 
-  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/stewards', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      ...(repoId ? { repoId } : {}),
-      ...(runs !== undefined ? { runs } : {}),
-    }),
+  await submitAndWatch('/v1/stewards', {
+    ...(repoId ? { repoId } : {}),
+    ...(runs !== undefined ? { runs } : {}),
   });
-
-  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
-  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
-
-  await watchManifest(submitted.manifestId);
 }
 
 /** Copy one manifest's verified patch onto the original files. */
@@ -1049,12 +1021,7 @@ async function batchCommand(argv: string[]): Promise<void> {
     process.exit(2);
   }
 
-  let repoId: string | undefined;
-  if (repoRef) {
-    const resolved = await resolveRepoRef(repoRef);
-    repoId = resolved.id;
-    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})\n`);
-  }
+  const repoId = await resolveRepoOption(repoRef, null);
 
   process.stdout.write(`Submitting batch heal…\n`);
   if (fromSteward) process.stdout.write(`  from steward report: ${fromSteward.slice(0, 8)}\n`);

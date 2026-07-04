@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type {
@@ -8,6 +7,7 @@ import type {
 } from '@poc/types';
 import type { Db } from '../db.js';
 import { withTenant } from '../db.js';
+import { submitManifest } from '../submit-manifest.js';
 
 const createTestSchema = z.object({
   goal: z.string().min(3),
@@ -38,64 +38,27 @@ export function registerTestsRoutes(app: FastifyInstance, db: Db): void {
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.flatten() });
     }
-
     const input = parsed.data;
-    const manifestId = randomUUID();
-    const correlationId = randomUUID();
-    // Q1 local: workflowId is just the manifest id — no Temporal yet.
-    const workflowId = `local-${manifestId}`;
 
-    const goal = {
-      kind: 'add_test' as const,
-      description: input.goal,
-      params: {
-        targetUrl: input.targetUrl,
-        expectedOutcomes: input.expectedOutcomes,
-        repoId: input.repoId ?? null,
-        maxSteps: input.maxSteps ?? DEFAULT_BUDGET.maxSteps,
+    const submitted = await submitManifest(db, request.tenant, request.userId, {
+      role: 'coverage',
+      goal: {
+        kind: 'add_test',
+        description: input.goal,
+        params: {
+          targetUrl: input.targetUrl,
+          expectedOutcomes: input.expectedOutcomes,
+          repoId: input.repoId ?? null,
+          maxSteps: input.maxSteps ?? DEFAULT_BUDGET.maxSteps,
+        },
       },
-    };
-
-    await withTenant(db, request.tenant, async (client) => {
-      await client.query(
-        `INSERT INTO manifests (
-           id, org_id, workspace_id, role, status, workflow_id,
-           goal, context, budget, success_gate, policy, audit
-         ) VALUES ($1, $2, $3, 'coverage', 'pending', $4,
-                   $5, $6, $7, $8, $9, $10)`,
-        [
-          manifestId,
-          request.tenant.orgId,
-          request.tenant.workspaceId,
-          workflowId,
-          JSON.stringify(goal),
-          JSON.stringify({ memoryRefs: [], priorManifests: [] }),
-          JSON.stringify(DEFAULT_BUDGET),
-          JSON.stringify({ verifier: 'judge', criteria: input.expectedOutcomes }),
-          JSON.stringify(DEFAULT_POLICY),
-          JSON.stringify({ correlationId }),
-        ],
-      );
-
-      await client.query(
-        `INSERT INTO manifest_events (manifest_id, workspace_id, kind, from_status, to_status, actor, payload, correlation_id)
-         VALUES ($1, $2, 'created', NULL, 'pending', $3, $4::jsonb, $5)`,
-        [
-          manifestId,
-          request.tenant.workspaceId,
-          `user:${request.userId}`,
-          JSON.stringify({ input }),
-          correlationId,
-        ],
-      );
+      budget: DEFAULT_BUDGET,
+      policy: DEFAULT_POLICY,
+      successGate: { verifier: 'judge', criteria: input.expectedOutcomes },
+      eventInput: input,
     });
 
-    return reply.code(202).send({
-      manifestId,
-      workflowId,
-      correlationId,
-      status: 'pending',
-    });
+    return reply.code(202).send(submitted);
   });
 
   app.get<{ Params: { id: string } }>('/v1/tests/:id/events', async (request, reply) => {

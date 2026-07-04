@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ManifestBudget, ManifestPolicy } from '@poc/types';
 import type { Db } from '../db.js';
 import { withTenant } from '../db.js';
+import { insertManifestRows } from '../submit-manifest.js';
 
 const registerSchema = z.object({
   name: z.string().min(1),
@@ -100,9 +100,6 @@ export function registerReposRoutes(app: FastifyInstance, db: Db): void {
       if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
       const repoId = request.params.id;
-      const manifestId = randomUUID();
-      const correlationId = randomUUID();
-      const workflowId = `local-${manifestId}`;
 
       return withTenant(db, request.tenant, async (client) => {
         const { rows } = await client.query<{ local_path: string | null }>(
@@ -117,48 +114,21 @@ export function registerReposRoutes(app: FastifyInstance, db: Db): void {
             .send({ error: 'repo has no local_path — cannot onboard from filesystem' });
         }
 
-        const goal = {
-          kind: 'onboard_repo' as const,
-          description: `Extract RepoProfile from ${localPath}`,
-          params: { repoId, localPath },
-        };
-
-        await client.query(
-          `INSERT INTO manifests (
-             id, org_id, workspace_id, role, status, workflow_id,
-             goal, context, budget, success_gate, policy, audit
-           ) VALUES ($1, $2, $3, 'onboarding', 'pending', $4,
-                     $5, $6, $7, $8, $9, $10)`,
-          [
-            manifestId,
-            request.tenant.orgId,
-            request.tenant.workspaceId,
-            workflowId,
-            JSON.stringify(goal),
-            JSON.stringify({ memoryRefs: [], priorManifests: [] }),
-            JSON.stringify(DEFAULT_BUDGET),
-            JSON.stringify({ verifier: 'reviewer', criteria: ['profile parses'] }),
-            JSON.stringify(DEFAULT_POLICY),
-            JSON.stringify({ correlationId }),
-          ],
-        );
-
-        await client.query(
-          `INSERT INTO manifest_events (manifest_id, workspace_id, kind, from_status, to_status, actor, payload, correlation_id)
-           VALUES ($1, $2, 'created', NULL, 'pending', $3, $4::jsonb, $5)`,
-          [
-            manifestId,
-            request.tenant.workspaceId,
-            `user:${request.userId}`,
-            JSON.stringify({ input: { repoId, localPath } }),
-            correlationId,
-          ],
-        );
+        const submitted = await insertManifestRows(client, request.tenant, request.userId, {
+          role: 'onboarding',
+          goal: {
+            kind: 'onboard_repo',
+            description: `Extract RepoProfile from ${localPath}`,
+            params: { repoId, localPath },
+          },
+          budget: DEFAULT_BUDGET,
+          policy: DEFAULT_POLICY,
+          successGate: { verifier: 'reviewer', criteria: ['profile parses'] },
+          eventInput: { repoId, localPath },
+        });
 
         return reply.code(202).send({
-          manifestId,
-          workflowId,
-          correlationId,
+          ...submitted,
           repoId,
           status: 'pending',
         });
