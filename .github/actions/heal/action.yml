@@ -1,0 +1,121 @@
+# test-agent heal — composite action (#18)
+#
+# Boots the whole stack on the runner (Postgres in Docker, API + worker as
+# background node processes), batch-heals the given specs, and emits:
+#   - ::notice / ::warning annotations on the healed/refused spec files
+#   - a job-summary table ($GITHUB_STEP_SUMMARY)
+#   - pr-comment.md with verified diffs, exposed as `comment-path`
+#
+# SUGGESTIONS ONLY: every heal is dry-run; this action never pushes to the
+# branch and never gates CI (the batch step's exit code is swallowed —
+# read the `patched` output if you want to act on it).
+#
+# Runs inside this repo's checkout (`uses: ./.github/actions/heal`).
+# Read docs/SECURITY-CI.md before wiring secrets.
+
+name: test-agent heal
+description: Batch-heal failing Playwright specs and post the diffs as suggestions
+inputs:
+  openai-api-key:
+    description: LLM key (pass a repo/org secret; never a fork-accessible value)
+    required: true
+  glob:
+    description: Spec glob to heal
+    required: false
+    default: 'tests/**/*.spec.ts'
+  max-cost:
+    description: Batch cost cap in USD — hard stop, remaining specs are skipped
+    required: false
+    default: '2'
+  repo-name:
+    description: Name to register the checkout under (fresh per runner)
+    required: false
+    default: 'ci-repo'
+  skip-install:
+    description: Set 'true' if the workflow already ran npm ci + build
+    required: false
+    default: 'false'
+outputs:
+  comment-path:
+    description: Path to pr-comment.md (post it with github-script if you want the PR comment)
+    value: ${{ steps.batch.outputs.comment-path }}
+  patched:
+    description: Number of specs patched (verified green)
+    value: ${{ steps.batch.outputs.patched }}
+  total:
+    description: Number of specs attempted
+    value: ${{ steps.batch.outputs.total }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install + build
+      if: inputs.skip-install != 'true'
+      shell: bash
+      run: |
+        npm ci
+        npm run build
+        npx playwright install chromium --with-deps
+
+    - name: Start Postgres + migrate + seed
+      shell: bash
+      run: |
+        docker compose up -d postgres
+        bash scripts/wait-for-postgres.sh
+        bash scripts/dev-migrate.sh
+        npx tsx scripts/seed-dev-tenant.ts
+
+    - name: Start API + worker
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        API_PORT: '3001'
+        NO_CACHE: '1'   # runner is shared infra — never reuse snapshot/LLM caches
+      run: |
+        node apps/api/dist/index.js  > /tmp/test-agent-api.log 2>&1 &
+        node apps/worker/dist/index.js > /tmp/test-agent-worker.log 2>&1 &
+        for i in $(seq 1 30); do
+          curl -sf http://127.0.0.1:3001/v1/health > /dev/null && break
+          sleep 1
+        done
+        curl -sf http://127.0.0.1:3001/v1/health
+
+    - name: Register + onboard this checkout
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        TEST_AGENT_API: 'http://127.0.0.1:3001'
+      run: |
+        npx tsx scripts/test-agent.ts init . --name '${{ inputs.repo-name }}'
+        npx tsx scripts/test-agent.ts repos
+
+    - name: Batch heal (dry-run, suggestions only)
+      id: batch
+      shell: bash
+      env:
+        TEST_AGENT_API: 'http://127.0.0.1:3001'
+      run: |
+        REPO_ID=$(npx tsx scripts/test-agent.ts repos | awk 'NR==1 {print $1}')
+        # Exit code intentionally swallowed: refusals are a valid outcome,
+        # and this action never gates CI. `patched`/`total` carry the result.
+        npx tsx scripts/test-agent.ts batch '${{ inputs.glob }}' \
+          --repo "$REPO_ID" \
+          --max-cost '${{ inputs.max-cost }}' \
+          --format github || true
+        # Ensure outputs exist even if the batch crashed before reporting
+        grep -q '^comment-path=' "$GITHUB_OUTPUT" 2>/dev/null || {
+          echo 'comment-path=' >> "$GITHUB_OUTPUT"
+          echo 'patched=0'     >> "$GITHUB_OUTPUT"
+          echo 'total=0'       >> "$GITHUB_OUTPUT"
+        }
+
+    - name: Surface service logs on failure
+      if: failure()
+      shell: bash
+      run: |
+        echo '::group::api.log'
+        tail -100 /tmp/test-agent-api.log || true
+        echo '::endgroup::'
+        echo '::group::worker.log'
+        tail -100 /tmp/test-agent-worker.log || true
+        echo '::endgroup::'

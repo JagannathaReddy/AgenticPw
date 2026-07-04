@@ -39,11 +39,10 @@
 
 ---
 
-# Deferred enhancements — comments to post
+# Deferred enhancements — none left
 
-The v0.2.x pass through issues #11–#20 is done except for one item whose scope
-is bigger than a one-shot commit. The comment below is copy-paste-ready for the
-issue thread (no `gh` CLI available in the sandbox that ran the batch).
+The v0.2.x pass through issues #11–#20 is now fully shipped; nothing remains
+deferred. Kept for the record:
 
 ~~#14 batch heal~~ — shipped in v0.5.0-batch and auto-closed by commit b26bfdc;
 no comment needed.
@@ -53,31 +52,9 @@ no comment needed.
 retrieval, 3-triple eval slice under the `feedback` tag); auto-closed by the
 release commit. No comment needed.
 
+~~#18 GitHub Action~~ — shipped in v0.7.0-ci (`.github/actions/heal`
+composite action, `--format github` CLI mode, `heal-on-failure.yml` dogfood
+workflow, SECURITY-CI.md); auto-closed by the release commit. No comment
+needed.
+
 ---
-
-## Comment for #18 — GitHub Action / CI mode
-
-> Deferring to a follow-up milestone. Rationale:
->
-> Everything in v0.2.x has been laptop-first on purpose (that's why we
-> rewrote from cloud SaaS in the first place). CI mode is a real target
-> but has infra requirements that the laptop story deliberately punted.
->
-> Blockers before this can ship:
-> 1. **Postgres in CI** — the Action needs a Postgres service container with
->    RLS + pgvector + our 11 migrations applied on cold start. Not hard but
->    an actual GH Action YAML change.
-> 2. **Secrets model** — LLM keys as GH secrets, budget cap per run,
->    `NO_CACHE` gating so caches from #20 don't cross runs on shared
->    runners. Needs a short SECURITY-CI.md.
-> 3. **Failure UX** — the CLI's SSE progress + colored diff (#13/#17) don't
->    translate to a GH check summary. Need a `--format=github-actions`
->    output mode that emits `::error` / job summary markdown instead.
-> 4. **Cache reuse across runs** — the cache from #20 was built for the same
->    machine. For CI it needs to hook `actions/cache` around the
->    `local-artifacts/cache/` dir.
->
-> Estimated shape: 1 `.github/actions/` composite action, 1 CLI output mode,
-> 1 docs file. ~2 days once someone actually wants CI.
->
-> Leaving open, unlabeled → roadmap.

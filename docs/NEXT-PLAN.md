@@ -87,9 +87,11 @@ eval tag for the with/without proof.
 4. Eval slice: corpus of (failure, expected verdict) pairs; measure
    refuse-accuracy with/without feedback — otherwise the feature is vibes.
 
-## Sprint 3b — #18 GitHub Action (est. ~2 days) → `v0.6.0-ci`
+## Sprint 3b — #18 GitHub Action (est. ~2 days) → `v0.7.0-ci` ✅ SHIPPED 2026-07-04
 
-Pick this if the trial says "great, but nobody runs a laptop daemon".
+Picked by explicit call ("Start #18") right after 3a. Composite action
+`.github/actions/heal`, CLI `--format github`, dogfood workflow
+`heal-on-failure.yml`, [SECURITY-CI.md](./SECURITY-CI.md).
 
 1. Composite action: Postgres service container + migrations + seed on boot.
 2. CLI `--format=github-actions`: `::error` annotations + job-summary
@@ -120,5 +122,9 @@ Sprint 1: #14 batch heal + steward trends ──→ v0.5.0-batch
 Sprint 2: developer trial #2 ──→ v0.5.1 quick fixes
    │
    ├─ Sprint 3a: #16 feedback ──→ v0.6.0-feedback ✅ (started early by request)
-   └─ trial says "CI or bust" ──→ Sprint 3b: #18 action ──→ v0.7.0-ci
+   └─ Sprint 3b: #18 action   ──→ v0.7.0-ci ✅ (started early by request)
 ```
+
+Both Sprint 3 tracks shipped before the Sprint 2 trial ran — the trial (still
+worth doing) now validates the whole surface instead of choosing between
+halves of it.

@@ -50,6 +50,7 @@ export interface BatchChildOutcome {
   status: 'succeeded' | 'rejected' | 'failed' | 'skipped_budget';
   category: string | null;
   patchedTestPath: string | null;
+  patchedPageObjectPath: string | null;
   alreadyPassing: boolean;
   message: string;
 }
@@ -148,6 +149,7 @@ export async function runBatch(
           status: 'skipped_budget',
           category: null,
           patchedTestPath: null,
+          patchedPageObjectPath: null,
           alreadyPassing: false,
           message: `Skipped: batch spend $${spent.toFixed(4)} ≥ cap $${maxCostUSD}`,
         });
@@ -222,6 +224,8 @@ export async function runBatch(
       status: outcome.status,
       category: (childResult?.category as string | undefined) ?? null,
       patchedTestPath: (childResult?.patchedTestPath as string | undefined) ?? null,
+      patchedPageObjectPath:
+        (childResult?.patchedPageObjectPath as string | undefined) ?? null,
       alreadyPassing: Boolean(childResult?.alreadyPassing),
       message: outcome.message,
     };

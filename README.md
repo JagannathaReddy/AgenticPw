@@ -1,6 +1,6 @@
 # test-agent — Agentic QA platform (local dev)
 
-**Release:** `v0.6.0-feedback` — human feedback now feeds the healer prompt and the eval harness (#16, see [docs/NEXT-PLAN.md](docs/NEXT-PLAN.md) Sprint 3a). Previous: v0.5.0-batch · [v0.4.0-steward](docs/MILESTONE-D.md) · [v0.3.0-dx] · [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
+**Release:** `v0.7.0-ci` — heal runs in GitHub Actions and posts verified diffs as PR suggestions (#18, see [docs/SECURITY-CI.md](docs/SECURITY-CI.md)). Previous: v0.6.0-feedback · v0.5.0-batch · [v0.4.0-steward](docs/MILESTONE-D.md) · [v0.3.0-dx] · [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
 
 An AI teammate for existing Playwright suites. Describe a test in English → get code in your repo's style. Point it at a failing test → get a patched version that passes, or a clear refusal with a category (including `out_of_scope` when the fix lives in a helper class it can see but must not patch). Hand it a rough `codegen` draft → get it polished into your repo's conventions. Ask about your suite → get a health report that separates flaky from broken and names heal candidates.
 
@@ -149,10 +149,17 @@ When we swap dev auth for WorkOS in v1, the middleware changes; the RLS policies
 - **The Task Manifest is the API between agents.** See [packages/ops-types/src/manifest.ts](packages/ops-types/src/manifest.ts).
 - **Activities are boring functions.** No Temporal in v0. When v1 arrives, wrap each function as a Temporal activity — same signature.
 
+## CI mode
+
+`.github/actions/heal` boots the stack on a GitHub runner, batch-heals a
+spec glob, and posts verified diffs as a PR comment — dry-run, suggestions
+only, budget-capped. [heal-on-failure.yml](.github/workflows/heal-on-failure.yml)
+dogfoods it on this repo (same-repo PRs touching `tests/**`, plus a weekly
+run). Wire your key per [docs/SECURITY-CI.md](docs/SECURITY-CI.md).
+
 ## What's *not* here yet
 
-- GitHub App PR flow (v1 — cloud deploy)
-- Scheduled weekly Steward runs (use cron locally; Temporal cron in v1)
+- GitHub App PR flow (v1 — cloud deploy; the Action above is the local-first stepping stone)
+- Scheduled weekly Steward runs (the CI schedule covers heal; steward-in-CI is a small follow-up)
 - WorkOS SSO, Temporal Cloud, multi-tenancy (v1)
 - Sandboxed browser pool (v1 — Chromium in gVisor + Egress Broker)
-- GitHub Action / CI mode (#18) — see [docs/ISSUE-DEFERRALS.md](docs/ISSUE-DEFERRALS.md)

@@ -524,6 +524,37 @@ breakage is a known product bug, and **switching to the prescribed
 `getByTestId`** when a note says button text is localized. All three pass on
 gpt-4o-mini: `npm run eval -- --tag feedback`.
 
+## Part 7 — Heal in CI: PR suggestions (v0.7.0)
+
+New in v0.7.0 (#18): `.github/actions/heal` boots the whole stack on a GitHub
+runner and `--format github` turns batch results into annotations, a job
+summary, and a PR comment. Observed run (simulated CI env on a laptop,
+1 deliberately-broken POM):
+
+```bash
+$ GITHUB_ACTIONS=1 npm run agent -- batch 'tests/cidemo/*.spec.ts' --format github
+
+  [100.6s] progress · child_done — 1/1 · tests/cidemo/ci-a.spec.ts · ✓ patched
+::notice file=tests/cidemo/ci-a.spec.ts::test-agent patched this spec (locator_drift) — dry-run…
+comment-file: local-artifacts/8c849844-…/pr-comment.md
+✓ Batch complete — 1/1 patched · $0.0016
+```
+
+The generated PR comment renders each verified patch as a `<details>` block
+with the spec **and page object** diffs plus a one-line apply command; refusals
+get their own section ("human decision needed"). The job summary gets the
+outcome table and spend. Nothing is pushed — the action never gates CI.
+
+**The loops compose.** In this same smoke, the first heal attempt weakened an
+assertion; the verify gate rejected it (`heal_did_not_pass`, 0/1 patched in
+the PR comment). One `agent feedback --down --note "never touch assertions —
+only fix the broken locator"` later, the re-run went **1/1 patched** with the
+assertion intact. Feedback (#16) fixed CI heal quality (#18) live.
+
+Wiring it up: see [SECURITY-CI.md](./SECURITY-CI.md) (key handling, $2 budget
+cap, fork-PR rules) and [heal-on-failure.yml](../.github/workflows/heal-on-failure.yml)
+for the dogfood workflow this repo runs on its own PRs.
+
 Broken suite → diagnosed → healed → verified green, ~3 minutes and $0.003
 end to end. Each child is a real triage manifest — `agent get <childId>`
 shows its events, and the batch stops early if spend crosses `--max-cost`.

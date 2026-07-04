@@ -48,10 +48,10 @@ function usage(): never {
 
 Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
-  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...]
+  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...] [--format github]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
   test-agent steward [--repo <shortId|uuid>] [--runs N]    # suite health report (default 3 runs)
-  test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N]
+  test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N] [--format github]
   test-agent batch --from-steward <manifestId>             # heal every candidate from a report
   test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
@@ -348,7 +348,12 @@ async function emitDiffIfTriageSucceeded(m: AnyManifest): Promise<void> {
  * Consume the SSE stream of manifest events. Falls back to the old polling
  * loop when SSE isn't supported (older API server).
  */
-async function watchManifest(id: string): Promise<void> {
+interface WatchOpts {
+  /** Runs on the final manifest before printTerminal/exit (e.g. GH report). */
+  onTerminal?: (m: AnyManifest) => Promise<void>;
+}
+
+async function watchManifest(id: string, opts: WatchOpts = {}): Promise<void> {
   const startTime = Date.now();
   const url = `${API_BASE}/v1/tests/${id}/events`;
 
@@ -361,7 +366,7 @@ async function watchManifest(id: string): Promise<void> {
 
   if (!res || !res.ok || !res.body) {
     // Fall through to polling (older server, network hiccup).
-    return watchManifestPolling(id, startTime);
+    return watchManifestPolling(id, startTime, opts);
   }
 
   const decoder = new TextDecoder();
@@ -410,6 +415,7 @@ async function watchManifest(id: string): Promise<void> {
       } else if (evName === 'terminal') {
         // Get the full manifest to feed printTerminal + emit diff.
         const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
+        if (opts.onTerminal) await opts.onTerminal(m);
         await emitDiffIfTriageSucceeded(m);
         printTerminal(m);
         process.exit(m.status === 'succeeded' ? 0 : 1);
@@ -419,11 +425,15 @@ async function watchManifest(id: string): Promise<void> {
 
   // Stream closed without a terminal event — fall through to a final poll
   // so we still print something.
-  return watchManifestPolling(id, startTime);
+  return watchManifestPolling(id, startTime, opts);
 }
 
 /** Legacy polling fallback (also used when SSE fails). */
-async function watchManifestPolling(id: string, startTime = Date.now()): Promise<void> {
+async function watchManifestPolling(
+  id: string,
+  startTime = Date.now(),
+  opts: WatchOpts = {},
+): Promise<void> {
   const seen = new Set<string>();
   while (true) {
     const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
@@ -440,6 +450,7 @@ async function watchManifestPolling(id: string, startTime = Date.now()): Promise
       process.stdout.write(`  [${elapsed}s] ${label}${suffix}\n`);
     }
     if (['succeeded', 'failed', 'rejected', 'cancelled'].includes(m.status)) {
+      if (opts.onTerminal) await opts.onTerminal(m);
       await emitDiffIfTriageSucceeded(m);
       printTerminal(m);
       process.exit(m.status === 'succeeded' ? 0 : 1);
@@ -606,17 +617,44 @@ interface HealArgs {
   pageObjectPath?: string;
   repoRef?: string;
   includeGlobs: string[];
+  format: OutputFormat;
+}
+
+type OutputFormat = 'text' | 'github';
+
+function parseFormat(v: string | undefined): OutputFormat {
+  if (v === 'github' || v === 'text') return v;
+  process.stderr.write(`--format must be 'text' or 'github', got '${v}'\n`);
+  process.exit(2);
+}
+
+/** Terminal hook that emits annotations + step summary + pr-comment.md. */
+function githubTerminalHook(): (m: AnyManifest) => Promise<void> {
+  return async (m) => {
+    const { emitGithubReport, triageAsChild } = await import('./gh-format.js');
+    const role = m.role ?? m.goal?.kind ?? '';
+    const isBatch = role === 'orchestrator' || m.goal?.kind === 'batch_heal';
+    const children = isBatch
+      ? ((m.result?.children ?? []) as import('./gh-format.js').GhChild[])
+      : [triageAsChild(m)];
+    await emitGithubReport(
+      { id: m.id, status: m.status, result: m.result },
+      children,
+    );
+  };
 }
 
 function parseHeal(argv: string[]): HealArgs {
   let testPath = '';
   let pageObjectPath: string | undefined;
   let repoRef: string | undefined;
+  let format: OutputFormat = 'text';
   const includeGlobs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--repo') repoRef = argv[++i];
     else if (a === '--page-object') pageObjectPath = argv[++i];
+    else if (a === '--format') format = parseFormat(argv[++i]);
     else if (a === '--include') {
       const g = argv[++i];
       if (g) includeGlobs.push(g);
@@ -631,7 +669,7 @@ function parseHeal(argv: string[]): HealArgs {
     }
   }
   if (!testPath) usage();
-  return { testPath, pageObjectPath, repoRef, includeGlobs };
+  return { testPath, pageObjectPath, repoRef, includeGlobs, format };
 }
 
 async function healCommand(argv: string[]): Promise<void> {
@@ -666,7 +704,10 @@ async function healCommand(argv: string[]): Promise<void> {
   process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
   process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
 
-  await watchManifest(submitted.manifestId);
+  await watchManifest(
+    submitted.manifestId,
+    args.format === 'github' ? { onTerminal: githubTerminalHook() } : {},
+  );
 }
 
 async function improveCommand(argv: string[]): Promise<void> {
@@ -986,11 +1027,13 @@ async function batchCommand(argv: string[]): Promise<void> {
   let fromSteward = '';
   let repoRef: string | undefined;
   let maxCost: number | undefined;
+  let format: OutputFormat = 'text';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--from-steward') fromSteward = argv[++i] ?? '';
     else if (a === '--repo') repoRef = argv[++i];
     else if (a === '--max-cost') maxCost = Number(argv[++i]);
+    else if (a === '--format') format = parseFormat(argv[++i]);
     else if (a === '--help' || a === '-h') usage();
     else if (a.startsWith('-')) {
       process.stderr.write(`Unknown flag: ${a}\n`);
@@ -1033,7 +1076,10 @@ async function batchCommand(argv: string[]): Promise<void> {
   if (submitted.specCount > 0) process.stdout.write(`  specs:      ${submitted.specCount}\n`);
   process.stdout.write('\n');
 
-  await watchManifest(submitted.manifestId);
+  await watchManifest(
+    submitted.manifestId,
+    format === 'github' ? { onTerminal: githubTerminalHook() } : {},
+  );
 }
 
 async function reposCommand(): Promise<void> {

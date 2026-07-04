@@ -1,0 +1,96 @@
+# Dogfood of #18: heal this repo's own Playwright specs in CI.
+#
+# Triggers:
+#   - pull_request touching tests/** — SAME-REPO branches only (fork PRs
+#     never see the LLM secret; see docs/SECURITY-CI.md)
+#   - weekly schedule + manual dispatch
+#
+# Suggestions only: the heal action is dry-run, never pushes, never fails
+# the job on refusals. Patched diffs land in the job summary, an artifact,
+# and (on PRs) a PR comment.
+
+name: heal-on-failure
+
+on:
+  pull_request:
+    paths:
+      - 'tests/**'
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      glob:
+        description: Spec glob to heal
+        default: 'tests/*.spec.ts'
+      max-cost:
+        description: Batch cost cap (USD)
+        default: '2'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: heal-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+
+jobs:
+  heal:
+    runs-on: ubuntu-latest
+    # Fork PRs get no secrets — skip instead of failing mysteriously.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 30
+    steps:
+      - name: Skip when no LLM key is configured
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::OPENAI_API_KEY secret not set — heal skipped." && exit 0
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+
+      - uses: actions/setup-node@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Heal (dry-run, budget-capped)
+        if: env.HAS_KEY == 'true'
+        id: heal
+        uses: ./.github/actions/heal
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          glob: ${{ github.event.inputs.glob || 'tests/*.spec.ts' }}
+          max-cost: ${{ github.event.inputs.max-cost || '2' }}
+          repo-name: agenticpw-ci
+
+      - name: Upload suggestions artifact
+        if: env.HAS_KEY == 'true' && steps.heal.outputs.comment-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: heal-suggestions
+          path: ${{ steps.heal.outputs.comment-path }}
+          if-no-files-found: ignore
+
+      - name: Post PR comment
+        if: >-
+          env.HAS_KEY == 'true' &&
+          github.event_name == 'pull_request' &&
+          steps.heal.outputs.comment-path != '' &&
+          steps.heal.outputs.patched != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('${{ steps.heal.outputs.comment-path }}', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
