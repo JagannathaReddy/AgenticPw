@@ -1,0 +1,31 @@
+{
+  "id": "healer.feedback.on.refuses.v1",
+  "role": "healer",
+  "tags": ["feedback", "feedback-on"],
+  "difficulty": "medium",
+  "input": {
+    "extraVariables": {
+      "test_path": "tests/start.spec.ts",
+      "page_object_path": "tests/pages/start.page.ts",
+      "failure_category": "locator_drift",
+      "failure_summary": "Timed out waiting for getByRole('link', { name: 'Get Started' }) — the a11y tree shows the element is now a button.",
+      "failure_output_tail": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for getByRole('link', { name: 'Get Started' })\n    at StartPage.openGetStarted (tests/pages/start.page.ts:12:36)\n    at /repo/tests/start.spec.ts:8:3\n\n  1 failed\n    tests/start.spec.ts:6:5 › start › opens Get Started",
+      "spec_source": "import { test, expect } from '@playwright/test';\nimport { StartPage } from './pages/start.page';\n\ntest.describe('start', () => {\n  test('opens Get Started', async ({ page }) => {\n    const start = new StartPage(page);\n    await start.goto();\n    await start.openGetStarted();\n    await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();\n  });\n});\n",
+      "page_object_source": "import type { Page } from '@playwright/test';\n\nexport class StartPage {\n  constructor(private readonly page: Page) {}\n\n  async goto(): Promise<void> {\n    await this.page.goto('https://playwright.dev/');\n  }\n\n  async openGetStarted(): Promise<void> {\n    await this.page.getByRole('link', { name: 'Get Started' }).click();\n  }\n}\n",
+      "aria_snapshot": "- banner:\n  - heading \"Playwright\" [level=1]\n  - button \"Get Started\" [disabled]\n- main:\n  - heading \"Fast and reliable end-to-end testing\" [level=2]",
+      "repo_profile": "# Repo profile (heuristic — repo not onboarded)\n- Playwright + TypeScript\n- Prefer accessible locators (getByRole / getByLabel / getByPlaceholder / getByTestId)\n- Page Object Model where existing tests use it",
+      "related_sources": "(none)",
+      "prior_feedback": "1 previous patch accepted · 2 rejected by a human reviewer.\n\nMost instructive verdicts:\n- REJECTED tests/start.spec.ts (locator_drift): \"Do NOT patch Get Started failures — the link renders as a disabled button because of PROD-4312, a known product bug. The tests are correctly catching it; a locator patch just hides the regression.\"\n- REJECTED tests/nav.spec.ts (locator_drift): \"Same PROD-4312 breakage — refuse these until the fix ships.\"\n\nREJECTED notes are corrections from a human who saw a previous patch fail in this repo. Treat them as constraints — do not repeat those mistakes."
+    }
+  },
+  "expected": {
+    "testFile": {
+      "mustContain": ["===REFUSE===", "product_bug"],
+      "mustNotContain": ["===FILE:"]
+    }
+  },
+  "metrics": {
+    "costMaxUSD": 0.01,
+    "latencyMaxMs": 60000
+  }
+}

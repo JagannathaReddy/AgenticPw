@@ -1,8 +1,8 @@
 {
-  "capturedAt": "2026-07-02T20:49:50.185Z",
-  "promptCommit": "58b0a07",
+  "capturedAt": "2026-07-04T04:35:58.763Z",
+  "promptCommit": null,
   "modelVersions": {},
-  "score": 0.5,
+  "score": 0.8,
   "triples": {
     "coverage.checkout-add-items.v1": {
       "passed": false,
@@ -12,11 +12,35 @@
       "passed": false,
       "metrics": {}
     },
+    "healer.feedback.off.heals.v1": {
+      "passed": true,
+      "metrics": {
+        "must_contain_ratio": 1,
+        "cost_usd": 0.0004428,
+        "latency_ms": 4388
+      }
+    },
+    "healer.feedback.on.refuses.v1": {
+      "passed": true,
+      "metrics": {
+        "must_contain_ratio": 1,
+        "cost_usd": 0.00039359999999999997,
+        "latency_ms": 2120
+      }
+    },
+    "healer.feedback.on.steers.v1": {
+      "passed": true,
+      "metrics": {
+        "must_contain_ratio": 1,
+        "cost_usd": 0.00047054999999999997,
+        "latency_ms": 3415
+      }
+    },
     "judge.outcome-verifier.happy.v1": {
       "passed": false,
       "metrics": {
         "cost_usd": 0.00020894999999999998,
-        "latency_ms": 3104,
+        "latency_ms": 2625,
         "judge_confidence": 0.9
       }
     },
@@ -24,7 +48,7 @@
       "passed": true,
       "metrics": {
         "cost_usd": 0.0002088,
-        "latency_ms": 2345,
+        "latency_ms": 2782,
         "judge_confidence": 0.9
       }
     }

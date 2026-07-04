@@ -5,6 +5,7 @@ import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
 import { runHeal } from '../activities/heal.js';
 import { classifyFailure } from '../activities/classify-failure.js';
+import { loadRepoFeedback, renderPriorFeedback } from '../activities/feedback-context.js';
 import { classifyWithLLM } from '../activities/classify-llm.js';
 import { captureA11ySnapshot, extractTargetUrl } from '../activities/capture-a11y.js';
 import { extractErrorText, runPlaywright } from '../activities/judge-runner.js';
@@ -355,6 +356,31 @@ export async function runTriage(
     });
   });
 
+  // ── 4b. Prior human feedback on heals in this repo (#16) ──────────────
+  // Rejection notes are constraints from someone who watched a previous
+  // patch fail. Best-effort: a feedback query failure must not kill a heal.
+  let priorFeedback = '(no prior human feedback on heals in this repo)';
+  try {
+    const fb = await loadRepoFeedback(deps.pool, tenant, repoId ?? null);
+    priorFeedback = renderPriorFeedback(fb);
+    if (fb.ups + fb.downs > 0) {
+      log.info(
+        { stage: 'feedback_context', ups: fb.ups, downs: fb.downs, rows: fb.rows.length },
+        'Loaded prior feedback for healer',
+      );
+      await withTenant(deps.pool, tenant, async (client) => {
+        await appendEvent(client, manifest, 'progress', null, null, {
+          stage: 'feedback_context',
+          ups: fb.ups,
+          downs: fb.downs,
+          injected: fb.rows.length,
+        });
+      });
+    }
+  } catch (err) {
+    log.warn({ stage: 'feedback_context', err: (err as Error).message }, 'Feedback load failed');
+  }
+
   // ── 5. LLM heal ────────────────────────────────────────────────────────
   log.info({ stage: 'heal' }, 'Calling healer LLM');
   let heal;
@@ -371,6 +397,7 @@ export async function runTriage(
         repoRoot: repo.repoRoot,
         repoProfile: repo.repoProfile,
         relatedSources: related.loaded,
+        priorFeedback,
       },
       deps.artifacts,
       deps.config,

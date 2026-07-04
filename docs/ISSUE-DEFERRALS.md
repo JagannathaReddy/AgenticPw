@@ -41,41 +41,17 @@
 
 # Deferred enhancements — comments to post
 
-The v0.2.x pass through issues #11–#20 is done except for two items whose scope
-is bigger than a one-shot commit. Each has a real dependency chain. Comments
-below are copy-paste-ready for the issue threads (no `gh` CLI available in the
-sandbox that ran the batch).
+The v0.2.x pass through issues #11–#20 is done except for one item whose scope
+is bigger than a one-shot commit. The comment below is copy-paste-ready for the
+issue thread (no `gh` CLI available in the sandbox that ran the batch).
 
 ~~#14 batch heal~~ — shipped in v0.5.0-batch and auto-closed by commit b26bfdc;
 no comment needed.
 
----
-
-## Comment for #16 — Human-in-the-loop feedback signal
-
-> Deferring to a follow-up milestone. Rationale:
->
-> Every heal today runs "cold" — the healer has the RepoProfile from #12/#39
-> but no memory of prior decisions on this repo. That's the gap #16 wants to
-> close (e.g. "we already told the healer never to touch `pages/checkout.page.ts`").
->
-> The dependency I don't want to skip:
-> 1. **New table `heal_feedback`** with `(workspace_id, repo_id, category,
->    veredict, notes, source_manifest_id, created_at)` and RLS the same way
->    `manifests` has it. New migration.
-> 2. **A retrieval step in the healer prompt** — like the RAG few-shot picker
->    (#24) but for feedback rows, not example specs. Needs its own tuning to
->    avoid ballooning the prompt.
-> 3. **A CLI verb** — probably `agent feedback <manifestId> --thumbs-{up,down}
->    --note "..."`, plus a `--reason` on `agent apply` that records positive
->    signal automatically.
-> 4. **An eval story** — otherwise this feature has no way to prove it
->    actually reduces refuse-to-heal errors. Would extend the eval harness.
->
-> Estimated shape: 1 migration, 1 activity (feedback retrieval), 3 CLI verbs,
-> new eval slice. ~3 days.
->
-> Leaving open, unlabeled → roadmap.
+~~#16 feedback loop~~ — shipped in v0.6.0-feedback (migration 0013
+`heal_feedback`, `agent feedback` + implicit 👍 on apply, healer prompt
+retrieval, 3-triple eval slice under the `feedback` tag); auto-closed by the
+release commit. No comment needed.
 
 ---
 

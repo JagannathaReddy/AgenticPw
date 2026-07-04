@@ -483,6 +483,47 @@ $ npm run agent -- steward --runs 2
   - ✅ Fixed (2): batch demo A, batch demo B
 ```
 
+## Part 6 — Feedback that teaches the healer (v0.6.0)
+
+New in v0.6.0 (#16): every `apply` records an implicit 👍; a `--down` with a
+note becomes a constraint the healer sees on its next run in the same repo.
+Observed run:
+
+```bash
+# 1. Heal + apply as usual — the apply records the signal for free
+$ npm run agent -- apply 3c7bfb95-…
+✓ overwrote tests/fbdemo/fb.spec.ts
+✓ overwrote tests/fbdemo/pages/fb.page.ts
+✓ recorded thumbs-up (wrong? test-agent feedback 3c7bfb95 --down --note "...")
+
+# 2. The patch turned out to be wrong? Say so — and say why
+$ npm run agent -- feedback 3c7bfb95-… --down \
+    --note "text is localized on this page — prefer getByTestId"
+👎 recorded for 3c7bfb95 (locator_drift)
+
+# 3. The next heal in this repo sees it (watch for feedback_context):
+$ npm run agent -- heal tests/fbdemo/fb.spec.ts --repo d6556bd8
+  [ 93.1s] progress · classified — category=locator_drift
+  [ 93.1s] progress · feedback_context        # ← 1 up · 1 down injected into the prompt
+  [ 97.1s] progress · heal_llm_done — $0.0016
+  [ 98.7s] succeeded — category=locator_drift
+
+# 4. Where is the healer earning trust, and where isn't it?
+$ npm run agent -- feedback --stats
+Accept-rate by failure category
+  category            👍    👎   accept
+  locator_drift        1     1    50%
+By healer prompt version × model
+  healer.system.v1    dc162e19b0c3  gpt-4o-mini    1   1   50%
+```
+
+The behavior change is eval-proven, not vibes: three healer triples in
+`prompts/eval/corpus/` (tag `feedback`) show the same failure healing without
+feedback, **refusing with `product_bug`** when a rejection note says the
+breakage is a known product bug, and **switching to the prescribed
+`getByTestId`** when a note says button text is localized. All three pass on
+gpt-4o-mini: `npm run eval -- --tag feedback`.
+
 Broken suite → diagnosed → healed → verified green, ~3 minutes and $0.003
 end to end. Each child is a real triage manifest — `agent get <childId>`
 shows its events, and the batch stops early if spend crosses `--max-cost`.

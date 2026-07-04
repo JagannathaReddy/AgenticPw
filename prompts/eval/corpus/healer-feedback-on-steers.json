@@ -1,0 +1,31 @@
+{
+  "id": "healer.feedback.on.steers.v1",
+  "role": "healer",
+  "tags": ["feedback", "feedback-on"],
+  "difficulty": "medium",
+  "input": {
+    "extraVariables": {
+      "test_path": "tests/checkout.spec.ts",
+      "page_object_path": "tests/pages/checkout.page.ts",
+      "failure_category": "locator_drift",
+      "failure_summary": "Timed out waiting for getByRole('button', { name: 'Place order' }) — button text changed.",
+      "failure_output_tail": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Place order' })\n    at CheckoutPage.placeOrder (tests/pages/checkout.page.ts:15:52)\n    at /repo/tests/checkout.spec.ts:11:3\n\n  1 failed\n    tests/checkout.spec.ts:9:5 › checkout › places an order",
+      "spec_source": "import { test, expect } from '@playwright/test';\nimport { CheckoutPage } from './pages/checkout.page';\n\ntest.describe('checkout', () => {\n  test('places an order', async ({ page }) => {\n    const checkout = new CheckoutPage(page);\n    await checkout.goto();\n    await checkout.placeOrder();\n    await expect(page.getByRole('heading', { name: 'Order confirmed' })).toBeVisible();\n  });\n});\n",
+      "page_object_source": "import type { Page } from '@playwright/test';\n\nexport class CheckoutPage {\n  constructor(private readonly page: Page) {}\n\n  async goto(): Promise<void> {\n    await this.page.goto('https://shop.example.com/checkout');\n  }\n\n  async placeOrder(): Promise<void> {\n    await this.page.getByRole('button', { name: 'Place order' }).click();\n  }\n}\n",
+      "aria_snapshot": "- main:\n  - heading \"Checkout\" [level=1]\n  - button \"Bestellung aufgeben\"\n  - link \"Back to cart\"",
+      "repo_profile": "# Repo profile (heuristic — repo not onboarded)\n- Playwright + TypeScript\n- Prefer accessible locators (getByRole / getByLabel / getByPlaceholder / getByTestId)\n- Page Object Model where existing tests use it",
+      "related_sources": "(none)",
+      "prior_feedback": "3 previous patches accepted · 1 rejected by a human reviewer.\n\nMost instructive verdicts:\n- REJECTED tests/checkout.spec.ts (locator_drift): \"The patch swapped in the German button text — checkout button copy is localized per market and changes weekly. Use getByTestId('place-order-btn'); that test id is stable across locales.\"\n- ACCEPTED tests/cart.spec.ts (timing) — applied to the repo\n\nREJECTED notes are corrections from a human who saw a previous patch fail in this repo. Treat them as constraints — do not repeat those mistakes."
+    }
+  },
+  "expected": {
+    "testFile": {
+      "mustContain": ["===FILE:", "getByTestId\\('place-order-btn'\\)"],
+      "mustNotContain": ["===REFUSE===", "Bestellung aufgeben"]
+    }
+  },
+  "metrics": {
+    "costMaxUSD": 0.01,
+    "latencyMaxMs": 60000
+  }
+}

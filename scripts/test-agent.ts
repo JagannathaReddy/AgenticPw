@@ -55,6 +55,8 @@ Usage:
   test-agent batch --from-steward <manifestId>             # heal every candidate from a report
   test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
+  test-agent feedback <manifestId> --up|--down [--note "..."]   # rate a heal (apply records --up for you)
+  test-agent feedback --stats                              # accept-rates per category / prompt version
   test-agent get <manifestId>
   test-agent list
 
@@ -742,6 +744,34 @@ async function stewardCommand(argv: string[]): Promise<void> {
 }
 
 /** Copy one manifest's verified patch onto the original files. */
+/**
+ * Applying a patch is the strongest "this heal was right" signal we get
+ * without asking. Record it as an implicit thumbs-up — best-effort: a
+ * feedback failure must never fail the apply, and only triage manifests
+ * take feedback (improve manifests would 422).
+ */
+async function recordApplyFeedback(m: AnyManifest, opts: { quiet?: boolean }): Promise<void> {
+  const role = m.role ?? '';
+  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) return;
+  try {
+    const res = await fetch(`${API_BASE}/v1/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ manifestId: m.id, verdict: 'up', source: 'apply' }),
+    });
+    if (res.ok && !opts.quiet) {
+      const body = (await res.json()) as { created?: boolean };
+      if (body.created) {
+        process.stdout.write(
+          `✓ recorded thumbs-up (wrong? test-agent feedback ${m.id.slice(0, 8)} --down --note "...")\n`,
+        );
+      }
+    }
+  } catch {
+    /* feedback is a side-channel; the apply already succeeded */
+  }
+}
+
 async function applyOne(m: AnyManifest, opts: { quiet?: boolean } = {}): Promise<boolean> {
   const id = m.id;
   if (m.status !== 'succeeded') {
@@ -785,6 +815,7 @@ async function applyOne(m: AnyManifest, opts: { quiet?: boolean } = {}): Promise
       );
     }
   }
+  await recordApplyFeedback(m, opts);
   return true;
 }
 
@@ -846,6 +877,108 @@ async function applyCommand(argv: string[]): Promise<void> {
   if (!ok) process.exit(1);
   const originalTestPath = (m.result ?? {}).originalTestPath as string | undefined;
   if (originalTestPath) process.stdout.write('\nRun: npx playwright test ' + originalTestPath + '\n');
+}
+
+interface FeedbackStats {
+  byCategory: Array<{ category: string; ups: number; downs: number; total: number }>;
+  byPrompt: Array<{
+    prompt_hash: string;
+    prompt_file: string;
+    model: string;
+    ups: number;
+    downs: number;
+    total: number;
+  }>;
+  recent: Array<{
+    manifest_id: string;
+    verdict: string;
+    source: string;
+    category: string | null;
+    test_path: string | null;
+    note: string | null;
+    created_at: string;
+  }>;
+}
+
+async function feedbackCommand(argv: string[]): Promise<void> {
+  let id = '';
+  let verdict: 'up' | 'down' | '' = '';
+  let note: string | undefined;
+  let stats = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--up') verdict = 'up';
+    else if (a === '--down') verdict = 'down';
+    else if (a === '--note') note = argv[++i];
+    else if (a === '--stats') stats = true;
+    else if (a === '--help' || a === '-h') usage();
+    else if (a.startsWith('-')) {
+      process.stderr.write(`Unknown flag: ${a}\n`);
+      usage();
+    } else if (!id) id = a;
+  }
+
+  if (stats) {
+    const s = await apiCall<FeedbackStats>('/v1/feedback/stats');
+    if (s.byCategory.length === 0) {
+      process.stdout.write(
+        '(no feedback yet — `test-agent apply` records it, or use `test-agent feedback <id> --up|--down`)\n',
+      );
+      return;
+    }
+    const rate = (ups: number, total: number) =>
+      total === 0 ? '   —' : `${String(Math.round((100 * ups) / total)).padStart(3)}%`;
+
+    process.stdout.write('Accept-rate by failure category\n');
+    process.stdout.write('  category            👍    👎   accept\n');
+    for (const r of s.byCategory) {
+      process.stdout.write(
+        `  ${r.category.padEnd(18)} ${String(r.ups).padStart(3)}  ${String(r.downs).padStart(4)}   ${rate(r.ups, r.total)}\n`,
+      );
+    }
+
+    process.stdout.write('\nBy healer prompt version × model\n');
+    process.stdout.write('  prompt              hash          model                👍    👎   accept\n');
+    for (const r of s.byPrompt) {
+      process.stdout.write(
+        `  ${r.prompt_file.padEnd(18)}  ${r.prompt_hash.slice(0, 12).padEnd(12)}  ${r.model.padEnd(18)} ${String(r.ups).padStart(3)}  ${String(r.downs).padStart(4)}   ${rate(r.ups, r.total)}\n`,
+      );
+    }
+
+    process.stdout.write('\nRecent\n');
+    for (const r of s.recent) {
+      const mark = r.verdict === 'up' ? '👍' : '👎';
+      const via = r.source === 'apply' ? 'via apply' : 'explicit';
+      const noteStr = r.note ? ` — "${r.note}"` : '';
+      process.stdout.write(
+        `  ${mark} ${r.manifest_id.slice(0, 8)}  ${(r.category ?? '?').padEnd(16)} ${(r.test_path ?? '').padEnd(36)} ${via}${noteStr}\n`,
+      );
+    }
+    return;
+  }
+
+  if (!id || !verdict) {
+    process.stderr.write(
+      'Usage: test-agent feedback <manifestId> --up|--down [--note "..."]  (or --stats)\n',
+    );
+    process.exit(2);
+  }
+
+  const created = await apiCall<{ id: string; category: string | null }>('/v1/feedback', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ manifestId: id, verdict, ...(note ? { note } : {}) }),
+  });
+  const mark = verdict === 'up' ? '👍' : '👎';
+  process.stdout.write(
+    `${mark} recorded for ${id.slice(0, 8)}${created.category ? ` (${created.category})` : ''}` +
+      `${note ? ` — "${note}"` : ''}\n`,
+  );
+  if (verdict === 'down' && !note) {
+    process.stdout.write(
+      '  Tip: a --note explains the miss to the healer on future runs — it is worth 10 bare thumbs.\n',
+    );
+  }
 }
 
 async function batchCommand(argv: string[]): Promise<void> {
@@ -938,6 +1071,8 @@ async function main(): Promise<void> {
       return batchCommand(rest);
     case 'apply':
       return applyCommand(rest);
+    case 'feedback':
+      return feedbackCommand(rest);
     case 'init':
       return initCommand(rest);
     case 'repos':

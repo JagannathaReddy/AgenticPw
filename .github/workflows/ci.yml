@@ -53,6 +53,8 @@ jobs:
         run: node --test apps/worker/dist/activities/stack-sources.test.js
       - name: flake-analyzer tests
         run: node --test apps/worker/dist/activities/flake-analyzer.test.js
+      - name: feedback-context tests
+        run: node --test apps/worker/dist/activities/feedback-context.test.js
 
   prompts:
     name: Prompt validation

@@ -1,4 +1,12 @@
-export type Role = 'coverage' | 'triage' | 'steward' | 'explorer' | 'generator' | 'judge' | 'onboarding';
+export type Role =
+  | 'coverage'
+  | 'triage'
+  | 'steward'
+  | 'explorer'
+  | 'generator'
+  | 'healer'
+  | 'judge'
+  | 'onboarding';
 
 export interface EvalTriple {
   id: string;

@@ -8,7 +8,7 @@ export interface EvalTriple {
   id: string;
 
   /** Which agent role this triple exercises. */
-  role: 'coverage' | 'triage' | 'steward' | 'explorer' | 'generator' | 'judge' | 'onboarding';
+  role: 'coverage' | 'triage' | 'steward' | 'explorer' | 'generator' | 'healer' | 'judge' | 'onboarding';
 
   /** Free-form tags for filtering. */
   tags?: string[];

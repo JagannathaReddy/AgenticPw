@@ -14,7 +14,7 @@ import type { CliOptions, Role } from './types.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const VALID_ROLES: readonly Role[] = ['coverage', 'triage', 'steward', 'explorer', 'generator', 'judge', 'onboarding'];
+const VALID_ROLES: readonly Role[] = ['coverage', 'triage', 'steward', 'explorer', 'generator', 'healer', 'judge', 'onboarding'];
 
 function parseArgs(argv: string[]): CliOptions {
   const opts: CliOptions = {

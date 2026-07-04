@@ -171,3 +171,47 @@ describe('append-only guarantees', () => {
     }
   });
 });
+
+describe('heal_feedback (0013)', () => {
+  it('A writes feedback; B cannot read it; UPDATE denied to app_user', async () => {
+    const a = await fx.connect();
+    let feedbackId: string;
+    try {
+      await setTenantContext(a, { orgId: fx.a.orgId, workspaceId: fx.a.workspaceId });
+      const { rows } = await a.query(
+        `INSERT INTO heal_feedback (workspace_id, manifest_id, verdict, source, note)
+         VALUES ($1, $2, 'up', 'explicit', 'rls test') RETURNING id`,
+        [fx.a.workspaceId, fx.a.manifestId],
+      );
+      feedbackId = rows[0].id;
+      await clearTenantContext(a);
+    } finally {
+      await a.end();
+    }
+
+    const b = await fx.connect();
+    try {
+      await setTenantContext(b, { orgId: fx.b.orgId, workspaceId: fx.b.workspaceId });
+      const { rows } = await b.query('SELECT id FROM heal_feedback WHERE id = $1', [feedbackId]);
+      assert.equal(rows.length, 0);
+      await clearTenantContext(b);
+    } finally {
+      await b.end();
+    }
+
+    const c = await fx.connect();
+    try {
+      await setTenantContext(c, { orgId: fx.a.orgId, workspaceId: fx.a.workspaceId });
+      let denied = false;
+      try {
+        await c.query(`UPDATE heal_feedback SET verdict = 'down' WHERE id = $1`, [feedbackId]);
+      } catch {
+        denied = true;
+      }
+      assert.equal(denied, true);
+      await clearTenantContext(c);
+    } finally {
+      await c.end();
+    }
+  });
+});

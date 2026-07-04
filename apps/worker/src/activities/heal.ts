@@ -24,6 +24,8 @@ export interface HealInput {
   repoProfile: unknown | null;
   /** Helper files pulled from the stack trace / --include globs (#10). */
   relatedSources: RelatedSource[];
+  /** Rendered prior-feedback block from renderPriorFeedback (#16). */
+  priorFeedback: string;
 }
 
 export interface HealOutput {
@@ -95,6 +97,7 @@ export async function runHeal(
       aria_snapshot: input.ariaSnapshot,
       repo_profile: summarizeProfileForHealer(input.repoProfile),
       related_sources: renderRelatedSources(input.relatedSources),
+      prior_feedback: input.priorFeedback,
     },
   });
 

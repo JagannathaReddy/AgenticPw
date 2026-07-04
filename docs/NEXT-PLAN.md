@@ -72,9 +72,11 @@ features.
 
 ---
 
-## Sprint 3a — #16 feedback loop (est. ~3 days) → `v0.6.0-feedback`
+## Sprint 3a — #16 feedback loop (est. ~3 days) → `v0.6.0-feedback` ✅ SHIPPED 2026-07-04
 
-Pick this if the trial says "heals are wrong/refused too often".
+Picked ahead of the Sprint 2 trial by explicit call ("Start #16"). All four
+slices landed; see DEMO.md Part 6 for the observed run and the `feedback`
+eval tag for the with/without proof.
 
 1. Migration 0013: `heal_feedback` (workspace, repo, manifest, verdict
    up/down, category, note, created_at) — RLS, append-only.
@@ -117,6 +119,6 @@ Sprint 1: #14 batch heal + steward trends ──→ v0.5.0-batch
    │
 Sprint 2: developer trial #2 ──→ v0.5.1 quick fixes
    │
-   ├─ trial says "heal quality" ──→ Sprint 3a: #16 feedback ──→ v0.6.0-feedback
-   └─ trial says "CI or bust"   ──→ Sprint 3b: #18 action   ──→ v0.6.0-ci
+   ├─ Sprint 3a: #16 feedback ──→ v0.6.0-feedback ✅ (started early by request)
+   └─ trial says "CI or bust" ──→ Sprint 3b: #18 action ──→ v0.7.0-ci
 ```
