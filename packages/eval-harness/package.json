@@ -13,8 +13,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@poc/prompts": "*",
-    "@poc/types": "*"
+    "@poc/prompts": "*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -155,18 +155,6 @@ export interface TaskManifest {
   updatedAt: string;
 }
 
-/**
- * Sent by callers when creating a Coverage manifest.
- * All other fields are derived by the API.
- */
-export interface CreateCoverageInput {
-  repoId: string;
-  goal: string;
-  targetUrl: string;
-  expectedOutcomes: string[];
-  credentialsRef?: string; // vault://... reference; never a raw credential
-  maxSteps?: number;
-}
 
 /**
  * Legal state transitions. Enforced in workflow code + validated on write.

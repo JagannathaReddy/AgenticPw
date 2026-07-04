@@ -36,4 +36,3 @@ export function manifestLogger(manifestId: string, correlationId: string) {
   });
 }
 
-export type Logger = typeof logger;

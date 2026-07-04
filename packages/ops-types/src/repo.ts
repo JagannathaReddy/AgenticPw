@@ -81,22 +81,6 @@ export interface RepoProfile {
   notes: string;
 }
 
-/**
- * Single-file convention fingerprint. Aggregated into a RepoProfile.
- */
-export interface FileConvention {
-  path: string;
-  locatorStyle: LocatorPattern;
-  locatorExamples: string[];
-  usesPageObject: boolean;
-  pageObjectImport: string | null;
-  importsTestFrom: string;
-  usesFixtures: string[];
-  hasSoftAssertions: boolean;
-  hasPoll: boolean;
-  hasSnapshots: boolean;
-  assertionCount: number;
-}
 
 /**
  * Locators the platform has learned across runs. Persists to memory_flows.
@@ -114,16 +98,3 @@ export interface NormalizedAction {
   action?: string;
 }
 
-export interface FlowMemory {
-  goalHash: string;
-  goal: string;
-  host: string;
-  url: string;
-  template: string;
-  actions: NormalizedAction[];
-  locators: LearnedLocator[];
-  testPath?: string;
-  jobId: string;
-  successCount: number;
-  updatedAt: string;
-}

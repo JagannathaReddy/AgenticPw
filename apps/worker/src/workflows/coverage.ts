@@ -6,6 +6,7 @@ import { runGenerator } from '../activities/generator.js';
 import { runJudge } from '../activities/judge.js';
 import { withTenant } from '../db.js';
 import { manifestLogger } from '../logger.js';
+import { appendEvent } from '../manifest-events.js';
 
 export interface CoverageManifestRow {
   id: string;
@@ -273,30 +274,6 @@ async function terminate(
   return { status, message };
 }
 
-async function appendEvent(
-  client: pg.PoolClient,
-  manifest: CoverageManifestRow,
-  kind: string,
-  fromStatus: string | null,
-  toStatus: string | null,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  await client.query(
-    `INSERT INTO manifest_events
-       (manifest_id, workspace_id, kind, from_status, to_status, actor, payload, correlation_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
-    [
-      manifest.id,
-      manifest.workspace_id,
-      kind,
-      fromStatus,
-      toStatus,
-      'system:worker',
-      JSON.stringify(payload),
-      manifest.audit.correlationId,
-    ],
-  );
-}
 
 // short() + log() helpers removed — replaced by manifestLogger which
 // includes manifestShortId in every event's structured field.

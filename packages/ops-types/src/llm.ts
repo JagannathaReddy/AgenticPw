@@ -49,28 +49,6 @@ export interface LLMCompleteResponse {
   errorCode?: string;
 }
 
-/** Task-class routing table. Kept as data so it can be diffed in PRs. */
-export const DEFAULT_ROUTING: Readonly<
-  Record<TaskClass, { primary: string; fallback: string }>
-> = {
-  plan: {
-    primary: 'anthropic/claude-sonnet-4-6',
-    fallback: 'openai/gpt-4o',
-  },
-  generate: {
-    primary: 'anthropic/claude-sonnet-4-6',
-    fallback: 'openai/gpt-4o',
-  },
-  classify: {
-    primary: 'anthropic/claude-haiku-4-5-20251001',
-    fallback: 'anthropic/claude-sonnet-4-6',
-  },
-  verify: {
-    primary: 'anthropic/claude-haiku-4-5-20251001',
-    fallback: 'anthropic/claude-sonnet-4-6',
-  },
-} as const;
-
 export function parseProviderModel(id: string): { provider: LLMProvider; model: string } {
   const slashIndex = id.indexOf('/');
   if (slashIndex === -1) {
