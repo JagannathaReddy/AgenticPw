@@ -19,8 +19,8 @@ Everything below runs on a laptop. Real Chromium. Real LLM API. Real Postgres wi
 ```bash
 # One-time
 docker compose up -d
-bash scripts/dev-migrate.sh
-npx tsx scripts/seed-dev-tenant.ts
+bash scripts/db-migrate.sh
+npx tsx scripts/db-seed-dev-tenant.ts
 cp .env.example .env    # then paste an OPENAI_API_KEY or ANTHROPIC_API_KEY
 
 # Run (in one terminal)
@@ -576,7 +576,7 @@ rm -rf tests/autonomous
 To wipe the entire local DB and start fresh:
 
 ```bash
-bash scripts/dev-reset.sh
+bash scripts/db-reset.sh
 ```
 
 ## Costs from this demo

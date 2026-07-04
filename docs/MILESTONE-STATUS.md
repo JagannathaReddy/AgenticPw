@@ -120,8 +120,8 @@ CLI (`test-agent`)  ──►  Fastify API :3000  ──►  Postgres 16 (RLS)
 ```bash
 # One-time
 docker compose up -d
-bash scripts/dev-migrate.sh
-npx tsx scripts/seed-dev-tenant.ts
+bash scripts/db-migrate.sh
+npx tsx scripts/db-seed-dev-tenant.ts
 cp .env.example .env && $EDITOR .env  # set OPENAI_API_KEY
 
 # Ongoing

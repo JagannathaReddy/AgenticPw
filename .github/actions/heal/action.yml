@@ -61,9 +61,9 @@ runs:
       shell: bash
       run: |
         docker compose up -d postgres
-        bash scripts/wait-for-postgres.sh
-        bash scripts/dev-migrate.sh
-        npx tsx scripts/seed-dev-tenant.ts
+        bash scripts/db-wait-for-postgres.sh
+        bash scripts/db-migrate.sh
+        npx tsx scripts/db-seed-dev-tenant.ts
 
     - name: Start API + worker
       shell: bash

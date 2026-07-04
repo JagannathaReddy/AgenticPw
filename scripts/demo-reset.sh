@@ -41,10 +41,10 @@ for i in {1..20}; do
 done
 
 echo "→ Applying migrations"
-bash "$SCRIPT_DIR/dev-migrate.sh" 2>&1 | grep -v NOTICE | tail -12
+bash "$SCRIPT_DIR/db-migrate.sh" 2>&1 | grep -v NOTICE | tail -12
 
 echo "→ Seeding dev tenant"
-npx tsx "$SCRIPT_DIR/seed-dev-tenant.ts" 2>&1 | tail -5
+npx tsx "$SCRIPT_DIR/db-seed-dev-tenant.ts" 2>&1 | tail -5
 
 echo ""
 echo "════════════════════════════════════════════════════════"

@@ -85,7 +85,7 @@ async function checkMigrations(): Promise<Omit<CheckResult, 'name'>> {
   return {
     ok,
     detail: ok ? 'core tables present (manifests, llm_calls)' : `some tables missing (${line})`,
-    fixHint: ok ? undefined : 'Run: bash scripts/dev-migrate.sh',
+    fixHint: ok ? undefined : 'Run: bash scripts/db-migrate.sh',
   };
 }
 

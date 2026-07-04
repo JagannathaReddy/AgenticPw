@@ -56,7 +56,7 @@ Multiple times, worker "seemed" hung when it was actually working fine — its "
 
 Bare `CREATE TRIGGER`, `ALTER TABLE ADD CONSTRAINT`, `CREATE POLICY` all fail on re-apply. Made every one idempotent (`DROP TRIGGER IF EXISTS`, `DO $$ BEGIN IF NOT EXISTS ... END $$;`).
 
-**Lesson:** the dev-migrate script should track applied migrations (like node-pg-migrate does). Reapplying via file scan is a footgun. Track in a `pgmigrations` table.
+**Lesson:** the db-migrate script should track applied migrations (like node-pg-migrate does). Reapplying via file scan is a footgun. Track in a `pgmigrations` table.
 
 ### 4. The a11y outcome verifier was over-strict
 
@@ -189,6 +189,6 @@ When we start on heal-failing-tests:
 
 **Ship the migration runner (with tracking table) before the second migration.**
 
-`dev-migrate.sh` re-applying migrations from a file scan bit us at least 3 times during the session. Idempotent migrations are a band-aid. `node-pg-migrate` in raw-SQL mode would have made every subsequent bug easier to isolate.
+`db-migrate.sh` re-applying migrations from a file scan bit us at least 3 times during the session. Idempotent migrations are a band-aid. `node-pg-migrate` in raw-SQL mode would have made every subsequent bug easier to isolate.
 
 Do this on day 1 of Milestone C. It's under an hour of work and pays for itself the next week.

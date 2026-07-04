@@ -97,7 +97,7 @@ packages/
 prompts/               Versioned prompts (system + user-template per role)
   explorer/  generator/  healer/  improver/  judge/  classifier/  onboarding/  steward/  eval/
 sql/migrations/        Postgres schema — RLS-first, 13 migrations
-scripts/               dev-up.sh, dev-migrate.sh, seed-dev-tenant.ts,
+scripts/               dev-up.sh, db-migrate.sh, db-seed-dev-tenant.ts,
                        test-agent.ts, doctor.ts, cost.ts, diff.ts, demo-reset.sh
 tests/                 Playwright suites (the seed test that ships)
 docs/                  Design docs, demo script, outreach kit

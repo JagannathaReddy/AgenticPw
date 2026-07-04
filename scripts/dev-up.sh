@@ -17,12 +17,12 @@ cd "$REPO_ROOT"
 echo "→ Starting Postgres"
 docker compose up -d postgres
 
-bash "$SCRIPT_DIR/wait-for-postgres.sh"
+bash "$SCRIPT_DIR/db-wait-for-postgres.sh"
 
-bash "$SCRIPT_DIR/dev-migrate.sh"
+bash "$SCRIPT_DIR/db-migrate.sh"
 
 echo "→ Seeding dev tenant"
-npx tsx "$SCRIPT_DIR/seed-dev-tenant.ts"
+npx tsx "$SCRIPT_DIR/db-seed-dev-tenant.ts"
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════"
