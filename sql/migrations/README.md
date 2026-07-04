@@ -1,39 +1,51 @@
 # SQL migrations
 
-Postgres 16 (Aurora) schema for the Q1 platform. Every migration is:
+Postgres 16 + pgvector, running in Docker (`docker compose up -d postgres`,
+container `test-agent-postgres`, host port 5433). Every migration is:
 
-- **Forward-only** — no `DOWN` migrations in Q1 (they don't survive real-world rollback anyway)
+- **Forward-only** — no `DOWN` migrations (they don't survive real-world rollback anyway)
 - **Numbered** — `NNNN_short_name.sql`; NNNN is monotonic, never re-used
-- **Idempotent where safe** — `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`
+- **Idempotent** — `CREATE TABLE IF NOT EXISTS`, `DROP POLICY IF EXISTS` + recreate, etc.
 - **RLS-enabled** for every tenant-scoped table
-- **Reviewed** — every migration PR needs two approvals (one from data owner P2, one from an unrelated eng)
 
 ## Runner
 
-We use `node-pg-migrate` in raw-SQL mode (not the JS API). Command:
+`scripts/db-migrate.sh` (behind `npm run db:migrate`) applies **every file in
+filename order on every run** via `docker exec psql`. There is no tracking
+table — idempotency is the mechanism, not bookkeeping.
 
-```bash
-npm run db:migrate            # applies all pending migrations
-npm run db:migrate:status     # shows applied vs. pending
-npm run db:migrate:create foo # scaffolds NNNN_foo.sql
-```
+Two consequences to internalize before authoring:
 
-Runner tracks state in a `pgmigrations` table.
+1. **Every migration must be safe to re-run against a live schema.** Guard
+   creations with `IF NOT EXISTS`; recreate policies with `DROP POLICY IF
+   EXISTS` first.
+2. **Constraint-replacing migrations must stay supersets of later state.**
+   A `DROP CONSTRAINT` + `ADD CONSTRAINT` (like the role-check migrations
+   0010/0011) is re-applied against rows created under newer constraints —
+   its allowed-value list has to include everything later migrations allow,
+   or the re-run fails. This bit us once; see the comment in 0010.
 
-## Order of application (Q1)
+A tracked-state runner (node-pg-migrate style) is the known upgrade when
+this becomes painful — [RETROSPECTIVE.md](../../docs/RETROSPECTIVE.md)
+records the lesson.
+
+## Order of application
 
 | # | Name | Purpose |
 |---|------|---------|
 | 0001 | `orgs_and_workspaces.sql` | Root tenancy tables + IdP linkage |
 | 0002 | `repositories.sql` | Per-workspace repos + profile pointer |
 | 0003 | `manifests.sql` | Task manifest + events (event-sourced) |
-| 0004 | `llm_calls_and_audit.sql` | LLM usage log + WORM audit log |
+| 0004 | `llm_calls_and_audit.sql` | LLM usage log + append-only audit log |
 | 0005 | `memory_and_budgets.sql` | Learned flows + spend budgets |
-| 0006 | `rls_policies.sql` | All RLS + tenant context helpers |
-| 0007 | `pgvector_setup.sql` | Extension + embedding column |
-| 0008 | `indexes.sql` | Performance indexes discovered during load test |
-
-Numbers left free (0009+) for Q1 hot-fix migrations discovered during partner ramp.
+| 0006 | `rls_policies.sql` | All RLS + tenant context helpers + `app_user` grants |
+| 0007 | `pgvector_setup.sql` | vector extension + test-file embeddings |
+| 0008 | `performance_indexes.sql` | Composite indexes for the hot query paths |
+| 0009 | `repositories_local_path.sql` | Local-filesystem repos: nullable `github_repo_id`, `local_path` |
+| 0010 | `onboarding_role.sql` | +`onboarding` in the manifests role check |
+| 0011 | `improver_role.sql` | +`improver` in the manifests role check (#19) |
+| 0012 | `steward_runs.sql` | `suite_runs` + `test_results` for flake analysis (Milestone D) |
+| 0013 | `heal_feedback.sql` | Human verdicts on heals, feeds the healer prompt (#16) |
 
 ## Tenant context — how RLS works
 
@@ -44,49 +56,46 @@ SET LOCAL app.org_id = 'uuid-here';
 SET LOCAL app.workspace_id = 'uuid-here';
 ```
 
-RLS policies compare row values to these variables. If a policy check fails, Postgres returns zero rows — the app sees "not found," never leaks data across tenants.
+RLS policies compare row values to these variables. If a policy check fails,
+Postgres returns zero rows — the app sees "not found," never leaks data
+across tenants.
 
-**System jobs** (workers not tied to a user request) use a separate context:
+**System jobs** (the worker's claim loop) use a separate context:
 
 ```sql
 SET LOCAL app.system_context = 'true';
 ```
 
-Only a hand-audited allowlist of policies grant `USING (current_setting('app.system_context', true) = 'true')`. Everything else denies by default.
+Only the policies that need it grant
+`USING (current_setting('app.system_context', true) = 'true')`. Everything
+else denies by default.
 
 ## Testing RLS
 
-`sql/rls-tests/` contains a Jest suite that:
-
-1. Creates two synthetic tenants A and B
-2. Signs in as A, tries to read/write every table
-3. Verifies A cannot see any of B's rows
-4. Repeats the reverse
-5. Runs the same tests as a "system" user without either `org_id` set — expects zero rows
-
-The suite runs on every PR touching `sql/` or the tenancy code. A failure blocks the merge.
+`packages/rls-tests/` (node:test, `npm run test:rls`) creates two synthetic
+tenants, proves neither can read/write the other's rows across the
+tenant-scoped tables, and checks the append-only guarantees (UPDATE/DELETE
+revoked from `app_user` on `manifest_events`, `audit_log`, `suite_runs`,
+`test_results`, `heal_feedback`).
 
 ## Migration authoring checklist
 
-- [ ] Migration filename follows `NNNN_snake_case.sql`
+- [ ] Filename follows `NNNN_snake_case.sql` and says what it touches
+- [ ] Safe to re-run against a live schema (see Runner above)
 - [ ] Every new table has RLS enabled (or explicitly justified as global)
-- [ ] Every RLS policy has an accompanying RLS test
-- [ ] Any DROP or ALTER on an existing column is preceded by a data audit
-- [ ] Migration is safe to run online (no long locks; use `CREATE INDEX CONCURRENTLY` for hot tables)
-- [ ] PR body includes: purpose, backfill strategy, rollback plan
-- [ ] `npm run db:migrate` succeeds against a fresh DB and against a copy of prod
+- [ ] Every RLS policy has an accompanying test in `packages/rls-tests/`
+- [ ] Append-only tables REVOKE UPDATE/DELETE from `app_user`
+- [ ] `npm run db:migrate` succeeds against a fresh DB **and** re-run against the current one
 
 ## Anti-patterns
 
-- ❌ Editing a migration file after it has been merged to `main`
 - ❌ `DROP TABLE ... CASCADE` without a data-loss review
-- ❌ New table without `workspace_id` (or explicit justification)
-- ❌ Using `service_role` connections in application code (RLS bypass = data breach)
-- ❌ Any `ALTER TYPE ... ADD VALUE` without checking replica behavior
+- ❌ New tenant-scoped table without `workspace_id`
+- ❌ Bypassing RLS with a superuser connection in application code
 - ❌ Multi-purpose "misc fix" migrations — one migration, one purpose
+- ❌ Constraint lists that don't survive re-application (see Runner, point 2)
 
 ## Extensions used
 
 - `pgcrypto` — `gen_random_uuid()` for primary keys
-- `pgvector` — embedding columns for memory retrieval (Q1 installs, Q2 uses)
-- `pg_stat_statements` — enabled on the RDS parameter group for perf visibility
+- `pgvector` — embedding columns for memory retrieval (installed, unused until semantic RAG lands)

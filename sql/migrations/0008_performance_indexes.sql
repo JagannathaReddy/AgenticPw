@@ -1,4 +1,4 @@
--- 0008_indexes.sql
+-- 0008_performance_indexes.sql
 -- Performance indexes discovered during Q1 load tests. Kept separate from
 -- table-creation migrations so we can tune without touching schema history.
 -- All CREATE INDEX statements use CONCURRENTLY where safe (i.e., not inside
