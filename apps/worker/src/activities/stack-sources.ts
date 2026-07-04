@@ -126,7 +126,17 @@ export async function loadRelatedSources(
     }
   }
 
-  return { loaded, missing };
+  // Playwright emits the same file under several spellings: absolute in the
+  // stack, testDir-relative in the error location header. An unreadable
+  // candidate that is a path-suffix of something we already loaded or
+  // excluded is an alias, not a genuinely missing file — reporting it as
+  // missing would trip the out_of_scope refusal on healthy input.
+  const known = [...excluded, ...loaded.map((l) => l.path)];
+  const genuinelyMissing = missing.filter(
+    (m) => !known.some((k) => k === m || k.endsWith('/' + m)),
+  );
+
+  return { loaded, missing: genuinelyMissing };
 }
 
 /**

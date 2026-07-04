@@ -12,15 +12,18 @@ import type { ImproveManifestRow } from './workflows/improve.js';
 import { runImprove } from './workflows/improve.js';
 import type { StewardManifestRow } from './workflows/steward.js';
 import { runSteward } from './workflows/steward.js';
+import type { BatchManifestRow } from './workflows/batch.js';
+import { runBatch } from './workflows/batch.js';
 
 const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
 interface ClaimedManifest {
   id: string;
-  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward';
+  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator';
   org_id: string;
   workspace_id: string;
   goal: unknown;
+  budget: unknown;
   audit: { correlationId: string };
 }
 
@@ -29,7 +32,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
     const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward')
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -38,7 +41,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
           SET status = 'assigned', updated_at = now()
          FROM picked
         WHERE m.id = picked.id
-        RETURNING m.id, m.role, m.org_id, m.workspace_id, m.goal, m.audit`,
+        RETURNING m.id, m.role, m.org_id, m.workspace_id, m.goal, m.budget, m.audit`,
     );
     return rows[0] ?? null;
   });
@@ -123,6 +126,12 @@ async function main(): Promise<void> {
         });
       } else if (claim.role === 'steward') {
         result = await runSteward(claim as unknown as StewardManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else if (claim.role === 'orchestrator') {
+        result = await runBatch(claim as unknown as BatchManifestRow, {
           pool,
           artifacts,
           config,

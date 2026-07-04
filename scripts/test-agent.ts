@@ -51,6 +51,9 @@ Usage:
   test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
   test-agent steward [--repo <shortId|uuid>] [--runs N]    # suite health report (default 3 runs)
+  test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N]
+  test-agent batch --from-steward <manifestId>             # heal every candidate from a report
+  test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent get <manifestId>
   test-agent list
@@ -147,6 +150,22 @@ function describeEvent(kind: string, p: Record<string, unknown>): string {
   const totalTests = g<number>('total');
   if (totalTests !== undefined) bits.push(`${totalTests} tests`);
 
+  const index = g<number>('index');
+  if (index !== undefined && of !== undefined) bits.push(`${index}/${of}`);
+  const testPathBit = g<string>('testPath');
+  if (testPathBit && index !== undefined) bits.push(testPathBit);
+  const childStatus = g<string>('childStatus');
+  if (childStatus) {
+    const already = g<boolean>('alreadyPassing');
+    bits.push(
+      already
+        ? '✓ already passing'
+        : childStatus === 'succeeded'
+          ? '✓ patched'
+          : `✗ ${childStatus}`,
+    );
+  }
+
   const verified = g<boolean>('verified');
   if (verified !== undefined) bits.push(`verified=${verified}`);
 
@@ -215,6 +234,31 @@ function printTerminal(m: AnyManifest): void {
         // separate call site. See emitDiffIfAvailable below.
         process.stdout.write('\n');
         process.stdout.write(`Apply the patch:  npm run agent -- apply ${m.id}\n`);
+      }
+    } else if (role === 'orchestrator' || m.goal?.kind === 'batch_heal') {
+      const children = (r.children ?? []) as Array<{
+        manifestId: string;
+        testPath: string;
+        status: string;
+        category: string | null;
+        patchedTestPath: string | null;
+        alreadyPassing: boolean;
+      }>;
+      process.stdout.write(`✓ Batch complete — ${String(r.patched ?? 0)}/${String(r.total ?? children.length)} patched`);
+      if (r.totalSpendUSD !== undefined) process.stdout.write(` · $${String(r.totalSpendUSD)}`);
+      process.stdout.write('\n\n');
+      for (const c of children) {
+        const mark = c.alreadyPassing
+          ? '– already passing'
+          : c.status === 'succeeded' && c.patchedTestPath
+            ? '✓ patched'
+            : c.status === 'skipped_budget'
+              ? '⏭ skipped (budget)'
+              : `✗ ${c.status}${c.category ? ` (${c.category})` : ''}`;
+        process.stdout.write(`  ${c.testPath.padEnd(48)} ${mark}\n`);
+      }
+      if (Number(r.patched ?? 0) > 0) {
+        process.stdout.write(`\nApply all verified patches:  npm run agent -- apply --batch ${m.id}\n`);
       }
     } else if (role === 'steward' || m.goal?.kind === 'suite_health') {
       process.stdout.write(`✓ Steward: suite health report ready\n`);
@@ -697,34 +741,21 @@ async function stewardCommand(argv: string[]): Promise<void> {
   await watchManifest(submitted.manifestId);
 }
 
-async function applyCommand(argv: string[]): Promise<void> {
-  const id = argv[0];
-  if (!id) {
-    process.stderr.write('Manifest id required. See recent triage runs with: test-agent list\n');
-    process.exit(2);
-  }
-
-  const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
-  const role = m.role ?? m.goal?.kind ?? '';
-  const isTriage = role === 'triage' || m.goal?.kind === 'heal_test';
-  const isImprove = role === 'improver' || m.goal?.kind === 'improve_test';
-  if (!isTriage && !isImprove) {
-    process.stderr.write(
-      `Manifest ${id.slice(0, 8)} is role=${role}; apply only works on triage/improve manifests.\n`,
-    );
-    process.exit(2);
-  }
+/** Copy one manifest's verified patch onto the original files. */
+async function applyOne(m: AnyManifest, opts: { quiet?: boolean } = {}): Promise<boolean> {
+  const id = m.id;
   if (m.status !== 'succeeded') {
     process.stderr.write(`Manifest ${id.slice(0, 8)} is ${m.status}, nothing to apply.\n`);
-    process.exit(1);
+    return false;
   }
   const r = m.result ?? {};
   const originalTestPath = r.originalTestPath as string | undefined;
   const patchedTestPath = r.patchedTestPath as string | undefined;
   const patchedPageObjectPath = r.patchedPageObjectPath as string | undefined;
   if (!originalTestPath || !patchedTestPath) {
-    process.stderr.write(`Manifest ${id.slice(0, 8)} has no patched files (may be alreadyPassing).\n`);
-    process.exit(1);
+    if (!opts.quiet)
+      process.stderr.write(`Manifest ${id.slice(0, 8)} has no patched files (may be alreadyPassing).\n`);
+    return false;
   }
 
   const fs = await import('node:fs/promises');
@@ -754,8 +785,122 @@ async function applyCommand(argv: string[]): Promise<void> {
       );
     }
   }
+  return true;
+}
 
-  process.stdout.write('\nRun: npx playwright test ' + originalTestPath + '\n');
+async function applyCommand(argv: string[]): Promise<void> {
+  let id = '';
+  let batchId = '';
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--batch') batchId = argv[++i] ?? '';
+    else if (a === '--help' || a === '-h') usage();
+    else if (a.startsWith('-')) {
+      process.stderr.write(`Unknown flag: ${a}\n`);
+      usage();
+    } else if (!id) id = a;
+  }
+
+  if (batchId) {
+    const parent = await apiCall<AnyManifest>(`/v1/tests/${batchId}`);
+    const role = parent.role ?? parent.goal?.kind ?? '';
+    if (!(role === 'orchestrator' || parent.goal?.kind === 'batch_heal')) {
+      process.stderr.write(`Manifest ${batchId.slice(0, 8)} is not a batch (role=${role}).\n`);
+      process.exit(2);
+    }
+    const children = ((parent.result?.children ?? []) as Array<{
+      manifestId: string;
+      testPath: string;
+      status: string;
+      patchedTestPath: string | null;
+    }>).filter((c) => c.status === 'succeeded' && c.patchedTestPath && c.manifestId);
+    if (children.length === 0) {
+      process.stderr.write('Batch has no verified patches to apply.\n');
+      process.exit(1);
+    }
+    let applied = 0;
+    for (const c of children) {
+      const child = await apiCall<AnyManifest>(`/v1/tests/${c.manifestId}`);
+      if (await applyOne(child, { quiet: true })) applied++;
+    }
+    process.stdout.write(`\n${applied}/${children.length} patches applied.\n`);
+    process.stdout.write('Run: npx playwright test\n');
+    return;
+  }
+
+  if (!id) {
+    process.stderr.write('Manifest id required. See recent runs with: test-agent list\n');
+    process.exit(2);
+  }
+  const m = await apiCall<AnyManifest>(`/v1/tests/${id}`);
+  const role = m.role ?? m.goal?.kind ?? '';
+  const isTriage = role === 'triage' || m.goal?.kind === 'heal_test';
+  const isImprove = role === 'improver' || m.goal?.kind === 'improve_test';
+  if (!isTriage && !isImprove) {
+    process.stderr.write(
+      `Manifest ${id.slice(0, 8)} is role=${role}; apply only works on triage/improve manifests (or --batch <id>).\n`,
+    );
+    process.exit(2);
+  }
+  const ok = await applyOne(m);
+  if (!ok) process.exit(1);
+  const originalTestPath = (m.result ?? {}).originalTestPath as string | undefined;
+  if (originalTestPath) process.stdout.write('\nRun: npx playwright test ' + originalTestPath + '\n');
+}
+
+async function batchCommand(argv: string[]): Promise<void> {
+  let globArg = '';
+  let fromSteward = '';
+  let repoRef: string | undefined;
+  let maxCost: number | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--from-steward') fromSteward = argv[++i] ?? '';
+    else if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--max-cost') maxCost = Number(argv[++i]);
+    else if (a === '--help' || a === '-h') usage();
+    else if (a.startsWith('-')) {
+      process.stderr.write(`Unknown flag: ${a}\n`);
+      usage();
+    } else if (!globArg) globArg = a;
+  }
+  if (!globArg && !fromSteward) {
+    process.stderr.write(`Give a spec glob or --from-steward <manifestId>.\n`);
+    usage();
+  }
+  if (maxCost !== undefined && (!Number.isFinite(maxCost) || maxCost <= 0)) {
+    process.stderr.write(`--max-cost must be a positive number (USD)\n`);
+    process.exit(2);
+  }
+
+  let repoId: string | undefined;
+  if (repoRef) {
+    const resolved = await resolveRepoRef(repoRef);
+    repoId = resolved.id;
+    process.stdout.write(`Repo: ${resolved.name} (${resolved.id.slice(0, 8)})\n`);
+  }
+
+  process.stdout.write(`Submitting batch heal…\n`);
+  if (fromSteward) process.stdout.write(`  from steward report: ${fromSteward.slice(0, 8)}\n`);
+  if (globArg) process.stdout.write(`  glob: ${globArg}\n`);
+  process.stdout.write('\n');
+
+  const submitted = await apiCall<{ manifestId: string; specCount: number }>('/v1/batches', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...(fromSteward ? { fromManifestId: fromSteward } : {}),
+      ...(globArg ? { glob: globArg } : {}),
+      ...(repoId ? { repoId } : {}),
+      ...(maxCost !== undefined ? { maxCostUSD: maxCost } : {}),
+    }),
+  });
+
+  process.stdout.write(`  manifestId: ${submitted.manifestId}\n`);
+  if (submitted.specCount > 0) process.stdout.write(`  specs:      ${submitted.specCount}\n`);
+  process.stdout.write('\n');
+
+  await watchManifest(submitted.manifestId);
 }
 
 async function reposCommand(): Promise<void> {
@@ -789,6 +934,8 @@ async function main(): Promise<void> {
       return improveCommand(rest);
     case 'steward':
       return stewardCommand(rest);
+    case 'batch':
+      return batchCommand(rest);
     case 'apply':
       return applyCommand(rest);
     case 'init':

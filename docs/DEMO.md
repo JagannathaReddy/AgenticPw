@@ -443,6 +443,56 @@ docker exec test-agent-postgres psql -U platform -d platform \
 - **Match your repo's conventions.** The local RAG picker uses word overlap over `tests/`. Milestone B's Repo Onboarding extracts a real `RepoProfile` (POM style, locator preferences, fixtures).
 - **Open a GitHub PR.** Files land in `local-artifacts/` and `tests/`. The PR flow is a later milestone.
 
+## Part 5 — Suite health → batch heal → green (the full loop)
+
+New in v0.4.0/v0.5.0: the Steward finds what's broken, batch heal fixes it,
+and the next report proves it. Observed run (2 deliberately-broken POMs
+seeded in `tests/batchdemo/`):
+
+```bash
+# 1. How bad is it?
+$ npm run agent -- steward --runs 2
+
+✓ Steward: suite health report ready
+  3 tests × 2 runs — 1 healthy · 0 flaky · 2 always-failing · 0 skipped
+  # report names both as locator_drift heal candidates
+
+# 2. Heal everything the report flagged — one command
+$ npm run agent -- batch --from-steward fd9cfb9a
+
+  [ 31.8s] progress · child_done — 1/2 · tests/batchdemo/batch-a.spec.ts · ✓ patched · category=locator_drift
+  [ 60.6s] progress · child_done — 2/2 · tests/batchdemo/batch-b.spec.ts · ✓ patched · category=locator_drift
+
+✓ Batch complete — 2/2 patched · $0.0029
+Apply all verified patches:  npm run agent -- apply --batch 73170857-…
+
+# 3. Everything is still dry-run. Apply when the diffs look right:
+$ npm run agent -- apply --batch 73170857-…
+✓ overwrote tests/batchdemo/batch-a.spec.ts
+✓ overwrote tests/batchdemo/pages/batch-a.page.ts
+✓ overwrote tests/batchdemo/batch-b.spec.ts
+✓ overwrote tests/batchdemo/pages/batch-b.page.ts
+2/2 patches applied.
+
+# 4. Prove it
+$ npm run agent -- steward --runs 2
+
+✓ Steward: suite health report ready
+  5 tests × 2 runs — 5 healthy · 0 flaky · 0 always-failing
+  ## Since last report (2026-07-03)
+  - ✅ Fixed (2): batch demo A, batch demo B
+```
+
+Broken suite → diagnosed → healed → verified green, ~3 minutes and $0.003
+end to end. Each child is a real triage manifest — `agent get <childId>`
+shows its events, and the batch stops early if spend crosses `--max-cost`.
+
+Batch can also run from a glob, no report needed:
+
+```bash
+npm run agent -- batch 'tests/**/*.spec.ts' --max-cost 2
+```
+
 ## Cleanup
 
 The generated tests live under `tests/autonomous/`. To clean them up:

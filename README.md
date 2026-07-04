@@ -1,6 +1,6 @@
 # test-agent — Agentic QA platform (local dev)
 
-**Release:** `v0.4.0-steward` — Milestone D closes the local Q1 plan. See [docs/MILESTONE-D.md](docs/MILESTONE-D.md). Previous: [v0.3.0-dx] · [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
+**Release:** `v0.5.0-batch` — batch heal closes the Steward → Triage loop (see [docs/NEXT-PLAN.md](docs/NEXT-PLAN.md) Sprint 1). Previous: [v0.4.0-steward](docs/MILESTONE-D.md) · [v0.3.0-dx] · [v0.2.0-triage](docs/MILESTONE-C.md) · [v0.1.0](docs/MILESTONE-STATUS.md).
 
 An AI teammate for existing Playwright suites. Describe a test in English → get code in your repo's style. Point it at a failing test → get a patched version that passes, or a clear refusal with a category (including `out_of_scope` when the fix lives in a helper class it can see but must not patch). Hand it a rough `codegen` draft → get it polished into your repo's conventions. Ask about your suite → get a health report that separates flaky from broken and names heal candidates.
 
@@ -67,6 +67,10 @@ npm run agent -- cost --since 7d
 
 # How healthy is the suite? Runs it 3× and separates flaky from broken
 npm run agent -- steward --repo <shortId>
+
+# Heal everything the report flagged, then apply all verified patches
+npm run agent -- batch --from-steward <manifestId>
+npm run agent -- apply --batch <batchId>
 ```
 
 Real Chromium opens. Real GPT-4o-mini writes / heals code. Real Playwright runs it. `succeeded` in ~20 seconds. See [docs/DEMO.md](docs/DEMO.md) for the full 4-part walkthrough with sample output.
@@ -102,7 +106,7 @@ infra/future/          Terraform for the cloud v1 target — parked
 |---------|--------------|
 | `npm run dev:up` | Start Postgres, apply migrations, seed dev tenant |
 | `npm run dev` | Start API (:3001) + worker in parallel with tsx watch |
-| `npm run agent` | Invoke the CLI (`add`, `heal`, `improve`, `steward`, `apply`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
+| `npm run agent` | Invoke the CLI (`add`, `heal`, `improve`, `steward`, `batch`, `apply`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
 | `npm run demo:reset` | Reset to clean recording state (see [DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md)) |
 | `npm run db:up` | Just start Postgres |
 | `npm run db:migrate` | Apply migrations to running Postgres |

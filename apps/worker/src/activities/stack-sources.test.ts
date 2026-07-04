@@ -105,6 +105,20 @@ test('path traversal in a relative frame is ignored', async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test('testDir-relative alias of an excluded file is not "missing"', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'stack-sources-'));
+  // Playwright's error header says `batchdemo/pages/a.page.ts` (testDir-
+  // relative) while the heal already excluded `tests/batchdemo/pages/a.page.ts`.
+  const { loaded, missing } = await loadRelatedSources(
+    root,
+    ['batchdemo/pages/a.page.ts', 'src/truly-gone.ts'],
+    { exclude: ['tests/batchdemo/pages/a.page.ts'] },
+  );
+  assert.equal(loaded.length, 0);
+  assert.deepEqual(missing, ['src/truly-gone.ts']);
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 // ── expandIncludeGlobs ─────────────────────────────────────────────────────
 
 test('expands globs to source files, skips non-source and traversal patterns', async () => {

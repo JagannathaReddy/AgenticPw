@@ -139,6 +139,66 @@ export function analyzeRuns(batches: RunBatch[], totalDurationMs: number): Suite
   };
 }
 
+/**
+ * Heal candidates: consistently-failing tests whose category the Triage
+ * workflow will actually accept. This is what `agent batch --from-steward`
+ * consumes.
+ */
+export function healCandidates(report: SuiteHealthReport): string[] {
+  return Array.from(
+    new Set(
+      report.tests
+        .filter(
+          (t) =>
+            t.verdict === 'always_failing' &&
+            (t.category === 'locator_drift' || t.category === 'timing'),
+        )
+        .map((t) => t.file),
+    ),
+  );
+}
+
+export interface TrendDeltas {
+  previousAt: string;
+  /** Tests healthy/absent last report, flaky or always_failing now. */
+  newProblems: string[];
+  /** Tests that were problems last report and are healthy now. */
+  fixed: string[];
+  /** Problems in both reports. */
+  stillBroken: string[];
+}
+
+/** Compare two reports' verdict maps. Pure; caller loads the previous report. */
+export function computeTrends(
+  current: SuiteHealthReport,
+  previous: SuiteHealthReport,
+  previousAt: string,
+): TrendDeltas {
+  const label = (t: TestHealth): string => `${t.file} › ${t.title}`;
+  const isProblem = (v: TestVerdict): boolean => v === 'flaky' || v === 'always_failing';
+
+  const prev = new Map(previous.tests.map((t) => [label(t), t.verdict]));
+  const curr = new Map(current.tests.map((t) => [label(t), t.verdict]));
+
+  const newProblems: string[] = [];
+  const fixed: string[] = [];
+  const stillBroken: string[] = [];
+
+  for (const [name, v] of curr) {
+    if (!isProblem(v)) continue;
+    const before = prev.get(name);
+    if (before !== undefined && isProblem(before)) stillBroken.push(name);
+    else newProblems.push(name);
+  }
+  for (const [name, v] of prev) {
+    if (!isProblem(v)) continue;
+    const now = curr.get(name);
+    if (now !== undefined && !isProblem(now)) fixed.push(name);
+  }
+
+  return { previousAt, newProblems, fixed, stillBroken };
+}
+
 function pct(n: number, total: number): string {
   if (total === 0) return '0%';
   return `${Math.round((n / total) * 100)}%`;
@@ -147,7 +207,12 @@ function pct(n: number, total: number): string {
 /** Deterministic markdown health report — works with zero LLM involvement. */
 export function renderHealthReport(
   report: SuiteHealthReport,
-  meta: { repoName: string | null; generatedAt: string; executiveSummary?: string | null },
+  meta: {
+    repoName: string | null;
+    generatedAt: string;
+    executiveSummary?: string | null;
+    trends?: TrendDeltas | null;
+  },
 ): string {
   const lines: string[] = [];
   lines.push(`# Suite health report`);
@@ -161,6 +226,23 @@ export function renderHealthReport(
     lines.push(`## Executive summary`);
     lines.push('');
     lines.push(meta.executiveSummary.trim());
+    lines.push('');
+  }
+
+  if (meta.trends) {
+    const t = meta.trends;
+    lines.push(`## Since last report (${t.previousAt})`);
+    lines.push('');
+    if (t.newProblems.length === 0 && t.fixed.length === 0 && t.stillBroken.length === 0) {
+      lines.push(`No change — same problem set as last time.`);
+    } else {
+      if (t.newProblems.length > 0)
+        lines.push(`- 🔺 **New problems (${t.newProblems.length}):** ${t.newProblems.map((n) => `\`${n}\``).join(', ')}`);
+      if (t.fixed.length > 0)
+        lines.push(`- ✅ **Fixed (${t.fixed.length}):** ${t.fixed.map((n) => `\`${n}\``).join(', ')}`);
+      if (t.stillBroken.length > 0)
+        lines.push(`- ↔ **Still broken (${t.stillBroken.length}):** ${t.stillBroken.map((n) => `\`${n}\``).join(', ')}`);
+    }
     lines.push('');
   }
 

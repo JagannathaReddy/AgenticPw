@@ -3,7 +3,16 @@ import type pg from 'pg';
 import { loadPrompt } from '@poc/prompts';
 import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
-import { analyzeRuns, renderHealthReport, type RunBatch } from '../activities/flake-analyzer.js';
+import fs from 'node:fs/promises';
+import {
+  analyzeRuns,
+  computeTrends,
+  healCandidates,
+  renderHealthReport,
+  type RunBatch,
+  type SuiteHealthReport,
+  type TrendDeltas,
+} from '../activities/flake-analyzer.js';
 import { runPlaywrightSuite } from '../activities/suite-runner.js';
 import { withTenant } from '../db.js';
 import { complete } from '../llm.js';
@@ -262,12 +271,44 @@ export async function runSteward(
     }
   }
 
+  // ── Trend deltas vs the previous report for this repo ─────────────────
+  let trends: TrendDeltas | null = null;
+  try {
+    const prev = await withTenant(deps.pool, tenant, async (client) => {
+      const { rows } = await client.query<{ id: string; finished_at: string }>(
+        `SELECT id, finished_at FROM manifests
+          WHERE role = 'steward' AND status = 'succeeded' AND id <> $1
+            AND goal->'params'->>'repoId' IS NOT DISTINCT FROM $2
+          ORDER BY finished_at DESC LIMIT 1`,
+        [manifest.id, repoId ?? null],
+      );
+      return rows[0] ?? null;
+    });
+    if (prev) {
+      const prevJson = await fs.readFile(
+        deps.artifacts.getPath(`${prev.id}/steward-report.json`),
+        'utf8',
+      );
+      trends = computeTrends(
+        report,
+        JSON.parse(prevJson) as SuiteHealthReport,
+        new Date(prev.finished_at).toISOString().slice(0, 10),
+      );
+    }
+  } catch (err) {
+    // Trends are additive — a missing/corrupt previous artifact never blocks
+    // the current report.
+    log.warn({ stage: 'trends', err: (err as Error).message }, 'Skipping trend deltas');
+  }
+
   // ── Render + persist report ────────────────────────────────────────────
   const generatedAt = new Date().toISOString();
+  const candidates = healCandidates(report);
   const markdown = renderHealthReport(report, {
     repoName: repo.repoName,
     generatedAt,
     executiveSummary,
+    trends,
   });
   const reportPath = `${manifest.id}/steward-report.md`;
   await deps.artifacts.put(reportPath, markdown);
@@ -284,6 +325,8 @@ export async function runSteward(
     flaky: report.flaky,
     alwaysFailing: report.alwaysFailing,
     skipped: report.skipped,
+    healCandidates: candidates,
+    trends,
     executiveSummary,
   });
 }

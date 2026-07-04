@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeRuns, renderHealthReport } from './flake-analyzer.js';
+import {
+  analyzeRuns,
+  computeTrends,
+  healCandidates,
+  renderHealthReport,
+} from './flake-analyzer.js';
 import { extractTestResults, type TestResultRow } from './suite-runner.js';
 
 const row = (over: Partial<TestResultRow>): TestResultRow => ({
@@ -215,6 +220,51 @@ test('all-green report says so', () => {
   const r = analyzeRuns([{ runIndex: 1, results: [row({})] }], 3000);
   const md = renderHealthReport(r, { repoName: null, generatedAt: 'now' });
   assert.match(md, /Every test passed in every run/);
+});
+
+test('healCandidates: always_failing + healable category only', () => {
+  const locatorError =
+    'TimeoutError: locator.click: Timeout 3000ms exceeded.\nCall log:\n  - waiting for getByRole(\'button\')';
+  const productBugError = 'Response: HTTP 500 Internal Server Error at /api/checkout';
+  const mk = (runIndex: number) => ({
+    runIndex,
+    results: [
+      row({ file: 'tests/healable.spec.ts', title: 'a', status: 'failed', errorFull: locatorError }),
+      row({ file: 'tests/human.spec.ts', title: 'b', status: 'failed', errorFull: productBugError }),
+      row({ file: 'tests/flaky.spec.ts', title: 'c', status: runIndex === 1 ? 'failed' : 'passed', errorFull: locatorError }),
+    ],
+  });
+  const r = analyzeRuns([mk(1), mk(2)], 5000);
+  assert.deepEqual(healCandidates(r), ['tests/healable.spec.ts']);
+});
+
+test('computeTrends: new / fixed / still-broken partitions', () => {
+  const report = (specs: Array<{ title: string; broken: boolean }>) =>
+    analyzeRuns(
+      [
+        {
+          runIndex: 1,
+          results: specs.map((s) =>
+            row({ title: s.title, status: s.broken ? 'failed' : 'passed', errorFull: s.broken ? 'e' : null }),
+          ),
+        },
+      ],
+      1000,
+    );
+  const prev = report([
+    { title: 'was broken, now fixed', broken: true },
+    { title: 'still broken', broken: true },
+    { title: 'was fine', broken: false },
+  ]);
+  const curr = report([
+    { title: 'was broken, now fixed', broken: false },
+    { title: 'still broken', broken: true },
+    { title: 'was fine, now broken', broken: true },
+  ]);
+  const t = computeTrends(curr, prev, '2026-07-01');
+  assert.deepEqual(t.newProblems, ['tests/a.spec.ts › was fine, now broken']);
+  assert.deepEqual(t.fixed, ['tests/a.spec.ts › was broken, now fixed']);
+  assert.deepEqual(t.stillBroken, ['tests/a.spec.ts › still broken']);
 });
 
 test('classifies on the full error text when the first line is generic', () => {
