@@ -25,49 +25,29 @@
 > - #11 `agent doctor` — the one-shot environment check this trial clearly needed
 > - #13 heal is dry-run by default now: colored diff, `agent apply` to commit it
 >
+> **And since your report, two more releases you'd care about:**
+> - v0.4.0-steward — `agent steward` runs your suite 3×, separates flaky from
+>   broken, and names heal candidates in a health report with trend deltas.
+> - v0.5.0-batch — #14 shipped: `agent batch --from-steward <id>` heals every
+>   candidate under one parent manifest with a per-batch cost cap, then
+>   `agent apply --batch <id>` applies all verified patches at once.
+>
 > Run `git pull && npm install && npm run agent -- doctor` and it should come up
 > green. If you have another afternoon in you, I'd genuinely value a second pass —
-> the remaining open items (#14 batch heal, #16 feedback loop, #18 CI mode) are
-> roadmap-ranked by exactly this kind of report.
+> the remaining open items (#16 feedback loop, #18 CI mode) are roadmap-ranked
+> by exactly this kind of report.
 
 ---
 
 # Deferred enhancements — comments to post
 
-The v0.2.x pass through issues #11–#20 is done except for three items whose scope
-is bigger than a one-shot commit. Each has a real dependency chain that the
-smaller enhancements just landed. Comments below are copy-paste-ready for the
-issue threads (no `gh` CLI available in the sandbox that ran the batch).
+The v0.2.x pass through issues #11–#20 is done except for two items whose scope
+is bigger than a one-shot commit. Each has a real dependency chain. Comments
+below are copy-paste-ready for the issue threads (no `gh` CLI available in the
+sandbox that ran the batch).
 
----
-
-## Comment for #14 — Batch heal / bulk triage
-
-> Deferring to a follow-up milestone. Rationale:
->
-> The building blocks now exist —
-> - #13 dry-run + colored diff, so a batch run can produce N diffs without
->   touching disk;
-> - #17 SSE progress stream, which a batch driver would multiplex per manifest;
-> - #12 detected Playwright config, so the batch driver can pick one primary
->   project instead of asking N times.
->
-> What's still missing before a batch UX is honest:
-> 1. **Fan-out semantics** — the current worker claims one manifest at a time
->    with `FOR UPDATE SKIP LOCKED`. Batch heal needs either a parent-manifest
->    with N children (adds a new join to `manifests` and a parent-status roll-up)
->    or a concurrent-worker mode. Either way it's a schema change, not a script.
-> 2. **Cost/budget aggregation** — `agent cost` from #15 groups by manifest
->    today. A batch needs a per-batch total and a per-batch max-cost gate,
->    otherwise a bad LLM prompt on 200 failing tests is a real bill.
-> 3. **Failure reporting** — one CLI process printing 200 SSE streams is not
->    readable. Needs a table view + final `X/Y patched` summary.
->
-> Estimated shape once picked up: 1 migration, 1 new workflow (`batch_triage`),
-> 1 API route pair (submit + list children), CLI table renderer. ~2 focused
-> days.
->
-> Leaving open, unlabeled → roadmap.
+~~#14 batch heal~~ — shipped in v0.5.0-batch and auto-closed by commit b26bfdc;
+no comment needed.
 
 ---
 

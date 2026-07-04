@@ -151,4 +151,4 @@ When we swap dev auth for WorkOS in v1, the middleware changes; the RLS policies
 - Scheduled weekly Steward runs (use cron locally; Temporal cron in v1)
 - WorkOS SSO, Temporal Cloud, multi-tenancy (v1)
 - Sandboxed browser pool (v1 — Chromium in gVisor + Egress Broker)
-- Batch heal (#14), feedback loop (#16), GitHub Action (#18) — see [docs/ISSUE-DEFERRALS.md](docs/ISSUE-DEFERRALS.md)
+- Feedback loop (#16), GitHub Action (#18) — see [docs/ISSUE-DEFERRALS.md](docs/ISSUE-DEFERRALS.md)
