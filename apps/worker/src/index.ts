@@ -42,7 +42,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
           SET status = 'assigned', updated_at = now()
          FROM picked
         WHERE m.id = picked.id
-        RETURNING m.id, m.role, m.org_id, m.workspace_id, m.goal, m.budget, m.audit`,
+        RETURNING m.id, m.role, m.org_id, m.workspace_id, m.goal, m.budget, m.policy, m.audit`,
     );
     return rows[0] ?? null;
   });

@@ -48,12 +48,12 @@ function usage(): never {
 
 Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
-  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...] [--format github]
+  test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...] [--format github] [--auto-apply] [--max-cost N]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
   test-agent steward [--repo <shortId|uuid>] [--runs N] [--format github]   # suite health report (default 3 runs)
   test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N] [--format github]
   test-agent batch --from-steward <manifestId>             # heal every candidate from a report
-  test-agent quarantine --from-steward <manifestId>        # wrap flagged flaky tests in test.fixme
+  test-agent quarantine --from-steward <manifestId> [--auto-apply]   # wrap flagged flaky tests in test.fixme
   test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent feedback <manifestId> --up|--down [--note "..."]   # rate a heal (apply records --up for you)
@@ -256,7 +256,11 @@ function printTerminal(m: AnyManifest): void {
         process.stdout.write(`✓ Triage: test already passes — nothing to heal\n`);
         if (r.testPath) process.stdout.write(`  test: ${String(r.testPath)}\n`);
       } else {
-        process.stdout.write(`✓ Triage: patch verified (dry-run — nothing on disk changed)\n`);
+        process.stdout.write(
+          r.autoApplied
+            ? `✓ Triage: patch verified and auto-applied (trust rung 2)\n`
+            : `✓ Triage: patch verified (dry-run — nothing on disk changed)\n`,
+        );
         if (r.category) process.stdout.write(`  category: ${String(r.category)}\n`);
         if (r.patchedTestPath)
           process.stdout.write(`  patched:  ${String(r.patchedTestPath)}\n`);
@@ -266,7 +270,11 @@ function printTerminal(m: AnyManifest): void {
         // filesystem reads, so we do that async there and pass here via a
         // separate call site. See emitDiffIfAvailable below.
         process.stdout.write('\n');
-        process.stdout.write(`Apply the patch:  npm run agent -- apply ${m.id}\n`);
+        process.stdout.write(
+          r.autoApplied
+            ? `Already applied. Wrong? npm run agent -- feedback ${m.id.slice(0, 8)} --down --note "..."\n`
+            : `Apply the patch:  npm run agent -- apply ${m.id}\n`,
+        );
       }
     } else if (role === 'quarantiner' || m.goal?.kind === 'quarantine_flaky') {
       const files = (r.files ?? []) as Array<{
@@ -274,13 +282,17 @@ function printTerminal(m: AnyManifest): void {
         quarantined: string[];
         skipped: Array<{ title: string; reason?: string }>;
       }>;
-      process.stdout.write(`✓ Quarantine: ${String(r.totalQuarantined)} test(s) wrapped in test.fixme (dry-run — nothing on disk changed)\n`);
+      process.stdout.write(
+        r.autoApplied
+          ? `✓ Quarantine: ${String(r.totalQuarantined)} test(s) wrapped in test.fixme and auto-applied (trust rung 2)\n`
+          : `✓ Quarantine: ${String(r.totalQuarantined)} test(s) wrapped in test.fixme (dry-run — nothing on disk changed)\n`,
+      );
       for (const f of files) {
         for (const t of f.quarantined) process.stdout.write(`  🔒 ${f.originalTestPath} › ${t}\n`);
         for (const sk of f.skipped) process.stdout.write(`  ⚠ ${f.originalTestPath} › ${sk.title} — ${sk.reason ?? 'skipped'}\n`);
       }
       process.stdout.write('\n');
-      process.stdout.write(`Apply the quarantine:  npm run agent -- apply ${m.id}\n`);
+      if (!r.autoApplied) process.stdout.write(`Apply the quarantine:  npm run agent -- apply ${m.id}\n`);
     } else if (role === 'orchestrator' || m.goal?.kind === 'batch_heal') {
       const children = (r.children ?? []) as Array<{
         manifestId: string;
@@ -674,6 +686,8 @@ interface HealArgs {
   repoRef?: string;
   includeGlobs: string[];
   format: OutputFormat;
+  autoApply: boolean;
+  maxCost?: number;
 }
 
 type OutputFormat = 'text' | 'github';
@@ -706,12 +720,16 @@ function parseHeal(argv: string[]): HealArgs {
   let pageObjectPath: string | undefined;
   let repoRef: string | undefined;
   let format: OutputFormat = 'text';
+  let autoApply = false;
+  let maxCost: number | undefined;
   const includeGlobs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--repo') repoRef = argv[++i];
     else if (a === '--page-object') pageObjectPath = argv[++i];
     else if (a === '--format') format = parseFormat(argv[++i]);
+    else if (a === '--auto-apply') autoApply = true;
+    else if (a === '--max-cost') maxCost = Number(argv[++i]);
     else if (a === '--include') {
       const g = argv[++i];
       if (g) includeGlobs.push(g);
@@ -726,7 +744,7 @@ function parseHeal(argv: string[]): HealArgs {
     }
   }
   if (!testPath) usage();
-  return { testPath, pageObjectPath, repoRef, includeGlobs, format };
+  return { testPath, pageObjectPath, repoRef, includeGlobs, format, autoApply, maxCost };
 }
 
 async function healCommand(argv: string[]): Promise<void> {
@@ -748,6 +766,8 @@ async function healCommand(argv: string[]): Promise<void> {
       ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
       ...(repoId ? { repoId } : {}),
       ...(args.includeGlobs.length > 0 ? { includeGlobs: args.includeGlobs } : {}),
+      ...(args.autoApply ? { autoApply: true } : {}),
+      ...(args.maxCost !== undefined ? { maxCostUSD: args.maxCost } : {}),
     },
     args.format === 'github' ? { onTerminal: githubTerminalHook() } : {},
   );
@@ -1220,10 +1240,12 @@ async function batchCommand(argv: string[]): Promise<void> {
 async function quarantineCommand(argv: string[]): Promise<void> {
   let fromSteward = '';
   let repoRef: string | undefined;
+  let autoApply = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--from-steward') fromSteward = argv[++i] ?? '';
     else if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--auto-apply') autoApply = true;
     else if (a === '--help' || a === '-h') usage();
     else {
       process.stderr.write(`Unknown argument: ${a}\n`);
@@ -1243,6 +1265,7 @@ async function quarantineCommand(argv: string[]): Promise<void> {
   await submitAndWatch('/v1/quarantines', {
     fromManifestId: fromSteward,
     ...(repoId ? { repoId } : {}),
+    ...(autoApply ? { autoApply: true } : {}),
   });
 }
 

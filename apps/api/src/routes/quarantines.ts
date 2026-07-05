@@ -8,6 +8,7 @@ import { submitManifest } from '../submit-manifest.js';
 const createQuarantineSchema = z.object({
   fromManifestId: z.string().uuid(),
   repoId: z.string().uuid().optional(),
+  autoApply: z.boolean().optional(),
 });
 
 // Deterministic workflow — the budget exists for shape consistency, not
@@ -74,10 +75,11 @@ export function registerQuarantinesRoutes(app: FastifyInstance, db: Db): void {
           repoId,
           stewardManifestId: input.fromManifestId,
           targets,
+          autoApply: input.autoApply ?? false,
         },
       },
       budget: DEFAULT_BUDGET,
-      policy: DEFAULT_POLICY,
+      policy: { ...DEFAULT_POLICY, trustRung: input.autoApply ? 2 : 1 },
       successGate: { verifier: 'judge', criteria: ['patched files run green'] },
       eventInput: { ...input, resolvedTargets: targets },
     });

@@ -43,6 +43,17 @@ inputs:
     description: Set 'true' if the workflow already ran npm ci + build
     required: false
     default: 'false'
+  open-pr:
+    description: >-
+      Trust rung 3 (heal mode only): apply verified patches on a branch and
+      open a PR. Still never touches the source branch; a human merges.
+      Requires github-token and contents+pull-requests write permissions.
+    required: false
+    default: 'false'
+  github-token:
+    description: Token for gh pr create when open-pr is 'true'
+    required: false
+    default: ''
 outputs:
   comment-path:
     description: Path to pr-comment.md (post it with github-script if you want the PR comment)
@@ -62,6 +73,9 @@ outputs:
   report-path:
     description: Steward mode — steward-report artifact path on the runner
     value: ${{ steps.steward.outputs.report-path }}
+  pr-url:
+    description: open-pr mode — URL of the created PR ('' when nothing was patched)
+    value: ${{ steps.open-pr.outputs.pr-url }}
 
 runs:
   using: composite
@@ -146,6 +160,30 @@ runs:
           echo 'patched=0'     >> "$GITHUB_OUTPUT"
           echo 'total=0'       >> "$GITHUB_OUTPUT"
         }
+
+    - name: Open PR with verified patches (trust rung 3)
+      if: inputs.mode != 'steward' && inputs.open-pr == 'true' && steps.batch.outputs.patched != '0'
+      id: open-pr
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TEST_AGENT_API: 'http://127.0.0.1:3001'
+      run: |
+        BATCH_ID=$(grep -oE '[0-9a-f-]{36}' <<< "$(dirname '${{ steps.batch.outputs.comment-path }}')" | tail -1)
+        BRANCH="test-agent/heal-${GITHUB_RUN_ID}"
+        git config user.name  'test-agent[bot]'
+        git config user.email 'test-agent[bot]@users.noreply.github.com'
+        git checkout -b "$BRANCH"
+        npx tsx scripts/test-agent.ts apply --batch "$BATCH_ID"
+        git add -A ':!local-artifacts'
+        git commit -m "fix(tests): test-agent verified heals (batch ${BATCH_ID:0:8})"
+        git push -u origin "$BRANCH"
+        PR_URL=$(gh pr create \
+          --title "test-agent: ${{ steps.batch.outputs.patched }} verified test heal(s)" \
+          --body-file '${{ steps.batch.outputs.comment-path }}' \
+          --head "$BRANCH")
+        echo "pr-url=$PR_URL" >> "$GITHUB_OUTPUT"
+        echo "::notice::Opened $PR_URL — human review + merge (rung 3 stops here)"
 
     - name: Surface service logs on failure
       if: failure()

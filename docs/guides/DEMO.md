@@ -651,3 +651,32 @@ $ npm run eval -- --tag promoted
 The eval report now separates promoted (real-world) triples from the
 hand-written corpus, so prompt changes are scored against actual field
 failures — "84% accept rate on locator-drift" stops being vibes.
+
+## Part 10 — Trust rungs + enforced policy (v0.11.0)
+
+New in v0.11.0: `manifest.policy` stops being decorative. Three observed runs:
+
+```bash
+# Policy refuse — the manifest's refuseCategories list is consulted first
+$ npm run agent -- heal tests/trustdemo/assert.spec.ts
+✗ rejected — category: assertion_broken
+  reason: Refused by manifest policy: 'assertion_broken' is in refuseCategories.
+
+# Trust rung 2 — a verified patch applies itself (opt-in per run)
+$ npm run agent -- heal tests/trustdemo/trust.spec.ts --auto-apply
+  [112.8s] progress · auto_applied
+✓ Triage: patch verified and auto-applied (trust rung 2)
+Already applied. Wrong? npm run agent -- feedback cdc9ffec --down --note "..."
+# worker overwrote the file AND recorded the implicit 👍 itself
+
+# Budget gate — enforced in the LLM shim, so every role is covered
+$ npm run agent -- heal tests/trustdemo/budget.spec.ts --max-cost 0.00005
+✗ rejected — category: budget_exceeded
+  reason: Manifest LLM budget exhausted: spent $0.0003 of $0.0001 cap
+# the llm_calls ledger shows it: ok $0.000325 (classifier) → budget_exceeded $0
+```
+
+Trust rung 3 lives in CI: `open-pr: 'true'` on the heal action commits
+verified patches to a `test-agent/heal-*` branch and opens a PR — a human
+still merges. Rungs 4–5 (auto-merge, unattended) stay unbuilt on purpose:
+they encode organizational trust, not code.

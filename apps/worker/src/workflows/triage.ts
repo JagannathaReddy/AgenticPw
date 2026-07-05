@@ -17,6 +17,7 @@ import {
 import { FsCache } from '../cache.js';
 import { withTenant, type Tenant } from '../db.js';
 import { guessPageObjectPath, loadRepoContext } from '../repo-context.js';
+import { BudgetExceededError, canAutoApply, shouldRefuse } from '../policy.js';
 import { manifestLogger } from '../logger.js';
 import {
   appendEvent,
@@ -37,8 +38,10 @@ export interface TriageManifestRow {
       testPath: string;
       pageObjectPath?: string | null;
       includeGlobs?: string[] | null;
+      autoApply?: boolean | null;
     };
   };
+  policy?: { refuseCategories?: string[]; trustRung?: number } | null;
   audit: { correlationId: string };
 }
 
@@ -202,6 +205,12 @@ export async function runTriage(
     });
   });
 
+  if (shouldRefuse(manifest.policy as never, classification.category)) {
+    return terminate(deps.pool, tenant, manifest, 'rejected', {
+      category: classification.category,
+      reason: `Refused by manifest policy: '${classification.category}' is in refuseCategories.`,
+    });
+  }
   if (!classification.isSafeToHeal) {
     return terminate(deps.pool, tenant, manifest, 'rejected', {
       category: classification.category,
@@ -356,6 +365,12 @@ export async function runTriage(
     // poll loop and leave it stuck in_progress until the next worker boot.
     const message = (err as Error).message;
     log.warn({ stage: 'heal', err: message }, 'Healer failed');
+    if (err instanceof BudgetExceededError) {
+      return terminate(deps.pool, tenant, manifest, 'rejected', {
+        category: 'budget_exceeded',
+        reason: message,
+      });
+    }
     return terminate(deps.pool, tenant, manifest, 'rejected', {
       category: 'heal_parse_error',
       reason: `Healer response could not be used: ${message}. Raw output is in heal-raw.md.`,
@@ -443,11 +458,47 @@ export async function runTriage(
   });
 
   if (verify.exitCode === 0 && !verify.timedOut) {
+    // Rung 2: policy + explicit ask → the worker applies the verified patch
+    // itself and records the implicit thumbs-up.
+    let autoApplied = false;
+    if (canAutoApply(manifest.policy as never, manifest.goal.params)) {
+      await fs.copyFile(specAbs, path.join(repo.repoRoot, testPath));
+      if (pageObjectPath) {
+        await fs
+          .copyFile(pageAbs, path.join(repo.repoRoot, pageObjectPath))
+          .catch(() => undefined);
+      }
+      await withTenant(deps.pool, tenant, async (client) => {
+        await client.query(
+          `INSERT INTO heal_feedback
+             (workspace_id, repo_id, manifest_id, verdict, source, category, test_path, prompt_file, prompt_hash)
+           VALUES ($1, $2, $3, 'up', 'apply', $4, $5, $6, $7)
+           ON CONFLICT (manifest_id) WHERE source = 'apply' DO NOTHING`,
+          [
+            manifest.workspace_id,
+            repoId ?? null,
+            manifest.id,
+            classification.category,
+            testPath,
+            heal.promptRef.file,
+            heal.promptRef.hash,
+          ],
+        );
+        await appendEvent(client, manifest, 'progress', null, null, {
+          stage: 'auto_applied',
+          trustRung: manifest.policy?.trustRung ?? null,
+          testPath,
+        });
+      });
+      autoApplied = true;
+      log.info({ stage: 'auto_applied', testPath }, 'Rung 2: patch auto-applied');
+    }
     return terminate(deps.pool, tenant, manifest, 'succeeded', {
       originalTestPath: testPath,
       patchedTestPath: patchedSpecRel,
       patchedPageObjectPath: patchedPageRel,
       category: classification.category,
+      autoApplied,
     });
   }
 

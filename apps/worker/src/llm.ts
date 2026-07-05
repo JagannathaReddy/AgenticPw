@@ -8,6 +8,7 @@ import type {
 import { parseProviderModel } from '@poc/types';
 import type { WorkerConfig } from './config.js';
 import { withTenant, type Tenant } from './db.js';
+import { BudgetExceededError, isOverBudget } from './policy.js';
 
 /**
  * v0 LLM Gateway. Direct provider calls, no fallback yet.
@@ -192,12 +193,41 @@ async function persistCall(
  * user message — internal providers flatten them. Multi-turn support lands
  * with a proper Gateway service in the SaaS scale-out.
  */
+/**
+ * Per-manifest budget gate (Sprint 7). Runs before every provider call so
+ * a runaway prompt is stopped mid-manifest regardless of which role is
+ * spending. Records a `budget_exceeded` llm_calls row for the ledger.
+ */
+async function enforceBudget(
+  request: LLMCompleteRequest,
+  pool: pg.Pool,
+  tenant: Tenant,
+): Promise<void> {
+  const { rows } = await withTenant(pool, tenant, (client) =>
+    client.query<{ cap: string | null; spent: string | null }>(
+      `SELECT m.budget->>'maxCostUSD' AS cap,
+              (SELECT SUM(cost_usd) FROM llm_calls WHERE manifest_id = m.id) AS spent
+         FROM manifests m
+        WHERE m.id = $1`,
+      [request.manifestId],
+    ),
+  );
+  if (rows.length === 0) return; // non-manifest callers (never in practice)
+  const budget = { maxCostUSD: rows[0].cap === null ? undefined : Number(rows[0].cap) };
+  const spent = Number(rows[0].spent ?? 0);
+  if (isOverBudget(spent, budget)) {
+    await persistCall(pool, tenant, request, 'openai', 'n/a', 0, 0, 0, 0, 'budget_exceeded', null);
+    throw new BudgetExceededError(spent, budget.maxCostUSD ?? 0);
+  }
+}
+
 export async function complete(
   request: LLMCompleteRequest,
   pool: pg.Pool,
   tenant: Tenant,
   config: WorkerConfig,
 ): Promise<LLMCompleteResponse> {
+  await enforceBudget(request, pool, tenant);
   const targetModelId = request.modelOverride ?? config.llmModel;
   const { provider, model } = parseProviderModel(targetModelId);
   const apiKey = resolveApiKey(provider);

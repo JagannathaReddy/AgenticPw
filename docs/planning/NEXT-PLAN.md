@@ -229,7 +229,7 @@ cloud service stays parked with its reason on record.
 | Prompt registry service | Parked — files + hash + eval already give solo-scale guarantees; a registry adds value when multiple teams publish prompts |
 | Eval ownership → QA infra team | N/A solo |
 
-## Sprint 7 — trust rungs 2–3 + policy enforcement (est. ~2 days) → `v0.11.0-trust`
+## Sprint 7 — trust rungs 2–3 + policy enforcement (est. ~2 days) → `v0.11.0-trust` ✅ SHIPPED 2026-07-06
 
 The design doc defined rung 1 only ("draft, review before merge" — today's
 dry-run + `apply`). Laptop-first ladder:

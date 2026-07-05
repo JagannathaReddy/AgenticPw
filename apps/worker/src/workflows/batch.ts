@@ -39,6 +39,7 @@ export interface BatchManifestRow {
     };
   };
   budget: { maxCostUSD?: number };
+  policy?: { refuseCategories?: string[]; trustRung?: number } | null;
   audit: { correlationId: string };
 }
 
@@ -177,6 +178,7 @@ export async function runBatch(
       org_id: manifest.org_id,
       workspace_id: manifest.workspace_id,
       goal: childGoal,
+      policy: manifest.policy ?? null,
       audit: { correlationId: childCorrelation },
     };
 

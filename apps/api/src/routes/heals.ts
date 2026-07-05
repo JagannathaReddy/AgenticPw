@@ -9,6 +9,8 @@ const createHealSchema = z.object({
   pageObjectPath: z.string().optional(),
   repoId: z.string().uuid().optional(),
   includeGlobs: z.array(z.string().min(1)).max(20).optional(),
+  autoApply: z.boolean().optional(),
+  maxCostUSD: z.number().positive().max(50).optional(),
 });
 
 const DEFAULT_BUDGET: ManifestBudget = {
@@ -42,10 +44,15 @@ export function registerHealsRoutes(app: FastifyInstance, db: Db): void {
           pageObjectPath: input.pageObjectPath ?? null,
           repoId: input.repoId ?? null,
           includeGlobs: input.includeGlobs ?? null,
+          autoApply: input.autoApply ?? false,
         },
       },
-      budget: DEFAULT_BUDGET,
-      policy: DEFAULT_POLICY,
+      budget: {
+        ...DEFAULT_BUDGET,
+        ...(input.maxCostUSD !== undefined ? { maxCostUSD: input.maxCostUSD } : {}),
+      },
+      // Rung 2 when the caller asked for auto-apply; rung 1 otherwise.
+      policy: { ...DEFAULT_POLICY, trustRung: input.autoApply ? 2 : 1 },
       successGate: { verifier: 'judge', criteria: ['patched test passes'] },
       eventInput: input,
     });

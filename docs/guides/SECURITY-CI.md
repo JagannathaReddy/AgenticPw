@@ -44,13 +44,18 @@ runner and calls a paid LLM API. Four things to get right before wiring it up.
 
 ## 4. What the action is allowed to do
 
-- **Suggestions only.** Every heal is dry-run; patches live in
-  `local-artifacts/<id>/` on the runner and in the PR comment / artifact.
-  The action never pushes, never commits, never auto-merges, and never
-  fails your CI on refusals (`patched`/`total` outputs let you build your
-  own policy if you want one).
-- The workflow needs only `contents: read` plus `pull-requests: write` if
-  you post the comment. No other permissions.
+- **Suggestions only by default (trust rung 1).** Every heal is dry-run;
+  patches live in `local-artifacts/<id>/` on the runner and in the PR
+  comment / artifact. The action never pushes to *your* branch, never
+  auto-merges, and never fails your CI on refusals.
+- **Trust rung 3 (`open-pr: 'true'`)** is the one write the action can do:
+  verified patches are committed to a fresh `test-agent/heal-*` branch and
+  opened as a PR — a human still reviews and merges. It requires an
+  explicit `github-token` plus `contents: write` and `pull-requests:
+  write`; without those inputs the step cannot run. Never grant this on
+  fork-triggered runs.
+- Rung 1 workflows need only `contents: read` plus `pull-requests: write`
+  if you post the comment. No other permissions.
 - The Postgres container is throwaway (default credentials, bound to the
   runner's localhost, destroyed with the runner). Do not point the action
   at a persistent shared database — RLS is real, but CI has no auth story

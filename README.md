@@ -6,7 +6,7 @@ suite → get a health report that separates flaky from broken — then heal
 everything it flagged in one command, and rate the patches so the next heal
 is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 
-**Release:** `v0.10.0-eval-loop` · previous tags: `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
+**Release:** `v0.11.0-trust` · previous tags: `v0.10.0-eval-loop` · `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
 ## What it does
 
@@ -21,8 +21,13 @@ is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 | **Feedback** | `agent feedback <id> --down --note "…"` | Human verdicts stored per repo and injected into the next heal's prompt; `apply` records a 👍 automatically |
 | **Quarantine** | `agent quarantine --from-steward <id>` | Flaky tests wrapped in `test.fixme` (dry-run diff, verified, applied via `apply`) and kept visible in the steward report |
 
-Everything is dry-run by default; `agent apply` is the only thing that touches
-your files. Every LLM call is metered (`agent cost`), every step is an event
+Everything is dry-run by default (**trust rung 1**); `agent apply` is the only
+thing that touches your files — unless you opt in per run: `--auto-apply`
+(rung 2) lets a verified patch apply itself, and the CI action's `open-pr`
+mode (rung 3) commits verified heals to a branch and opens a PR for human
+review. Every manifest carries a policy (refuse categories, LLM spend cap,
+trust rung) that the worker actually enforces — a manifest that hits its
+`maxCostUSD` mid-flight is rejected with the ledger to prove it. Every LLM call is metered (`agent cost`), every step is an event
 you can watch live over SSE.
 
 ## Quick start (5 minutes)

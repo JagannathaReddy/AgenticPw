@@ -6,6 +6,7 @@ import type { WorkerConfig } from '../config.js';
 import { quarantineTests, type QuarantineEdit } from '../activities/quarantine-transform.js';
 import { runPlaywright } from '../activities/judge-runner.js';
 import { withTenant, type Tenant } from '../db.js';
+import { canAutoApply } from '../policy.js';
 import { loadRepoContext } from '../repo-context.js';
 import { manifestLogger } from '../logger.js';
 import {
@@ -38,8 +39,10 @@ export interface QuarantineManifestRow {
       repoId?: string | null;
       stewardManifestId?: string | null;
       targets: Array<{ file: string; title: string }>;
+      autoApply?: boolean | null;
     };
   };
+  policy?: { refuseCategories?: string[]; trustRung?: number } | null;
   audit: { correlationId: string };
 }
 
@@ -177,10 +180,35 @@ export async function runQuarantine(
     });
   }
 
+  let autoApplied = false;
+  if (canAutoApply(manifest.policy as never, manifest.goal.params)) {
+    for (const f of files) {
+      if (!f.patchedTestPath) continue;
+      await fs.copyFile(f.patchedTestPath, path.join(repo.repoRoot, f.originalTestPath));
+    }
+    await withTenant(deps.pool, tenant, async (client) => {
+      await client.query(
+        `INSERT INTO heal_feedback
+           (workspace_id, repo_id, manifest_id, verdict, source, category)
+         VALUES ($1, $2, $3, 'up', 'apply', 'flaky')
+         ON CONFLICT (manifest_id) WHERE source = 'apply' DO NOTHING`,
+        [manifest.workspace_id, repoId ?? null, manifest.id],
+      );
+      await appendEvent(client, manifest, 'progress', null, null, {
+        stage: 'auto_applied',
+        trustRung: manifest.policy?.trustRung ?? null,
+        files: files.filter((f) => f.patchedTestPath).map((f) => f.originalTestPath),
+      });
+    });
+    autoApplied = true;
+    log.info({ stage: 'auto_applied' }, 'Rung 2: quarantine auto-applied');
+  }
+
   return terminate(deps.pool, tenant, manifest, 'succeeded', {
     category: 'flaky',
     stewardManifestId: stewardManifestId ?? null,
     totalQuarantined,
+    autoApplied,
     files,
   });
 }
