@@ -128,3 +128,82 @@ Sprint 2: developer trial #2 ──→ v0.5.1 quick fixes
 Both Sprint 3 tracks shipped before the Sprint 2 trial ran — the trial (still
 worth doing) now validates the whole surface instead of choosing between
 halves of it.
+
+---
+
+# Post-v0.7 plan (2026-07-06) — no infra track
+
+Cloud v1 (Temporal, WorkOS, gVisor, GitHub App) stays parked in
+`infra/future/` — explicitly out of scope for this plan. Everything below is
+laptop-first and comes from a deferral already recorded in the repo.
+
+## Sprint 4 — steward in CI (est. ~½ day) → `v0.8.0-steward-ci`
+
+The README's own flag: "the CI schedule covers heal; steward-in-CI is a
+small follow-up." Completes the CI story — a weekly suite-health report
+lands in the job summary, with heal candidates one click from the batch
+action.
+
+1. `agent steward --format github`: health counts + verdict table + heal
+   candidates + trend deltas into `$GITHUB_STEP_SUMMARY`; `GITHUB_OUTPUT`
+   carries the manifest id + candidate count so a workflow can chain into
+   `agent batch --from-steward`.
+2. Generalize `.github/actions/heal` with a `mode: heal | steward` input
+   (bootstrap steps are identical; only the final command differs).
+3. `suite-health.yml`: weekly + manual dispatch, secret-gated like
+   heal-on-failure, uploads `steward-report.json` as an artifact.
+
+## Sprint 5 — auto-quarantine flaky tests (est. ~2 days) → `v0.9.0-quarantine`
+
+Parked at v0.4.0 because "writing to specs crosses the trust-rung boundary;
+needs the #16 feedback loop first." #16 shipped — the blocker is gone, and
+the shape follows the heal pattern exactly:
+
+1. Steward already names flaky tests; add `agent quarantine --from-steward
+   <id>` producing a dry-run diff that wraps each flaky test in
+   `test.fixme(...)` (or `test.skip` with a dated reason comment) — never
+   deletes, never edits test bodies.
+2. `agent apply` (existing) commits the diff; the apply records feedback so
+   a wrong quarantine teaches the analyzer like a wrong heal does.
+3. Steward report gains a "quarantined" section so skipped tests stay
+   visible instead of silently rotting; un-quarantine = a normal heal once
+   the test goes green K runs in a row (report suggests it).
+4. Smoke: flaky demo test → quarantine diff → apply → suite green →
+   steward shows it under quarantined, not healthy.
+
+## Sprint 6 — feedback grows the eval corpus (est. ~1–2 days) → `v0.10.0-eval-loop`
+
+The unbuilt "optional" half of issue #16: today feedback teaches the
+*healer prompt*; it should also grow the *eval corpus* so prompt changes
+are scored against real-world failures, not just the hand-written triples.
+
+1. `agent feedback --promote <manifestId>`: turn a rated heal's
+   (failure, spec, verdict) into an anonymized eval triple under
+   `prompts/eval/corpus/` — thumbs-down heals become counter-examples
+   (the most valuable kind).
+2. Eval report gains a "real-world slice" section: accept-rate on promoted
+   triples vs hand-written ones.
+3. Guardrail: `--promote` prints the triple for review before writing —
+   corpus entries are code, they go through git like everything else.
+
+## Standing items (not sprints)
+
+| Item | Trigger |
+|------|---------|
+| Developer trial #2 | Calendar — still the highest-value validation; now covers batch + feedback + CI + (post-Sprint 4) steward-in-CI |
+| pgvector semantic RAG | A trial user with a big suite says generated tests miss their conventions despite good examples existing |
+| Migration tracking runner | Re-run pain recurs (sql/migrations/README.md records the constraint-superset footgun) |
+| Batch concurrency knob | A suite where sequential child heals are the bottleneck |
+
+## Sequence
+
+```
+Sprint 4: steward-in-CI      ──→ v0.8.0-steward-ci   (~½ day)
+   │
+Sprint 5: auto-quarantine    ──→ v0.9.0-quarantine   (~2 days, unblocked by #16)
+   │
+Sprint 6: feedback→eval loop ──→ v0.10.0-eval-loop   (~1–2 days)
+
+Developer trial #2 runs whenever calendar allows — it doesn't block any
+sprint, and each shipped sprint makes it more informative.
+```
