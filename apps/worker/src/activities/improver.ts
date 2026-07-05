@@ -7,6 +7,7 @@ import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
 import type { Tenant } from '../db.js';
 import { complete } from '../llm.js';
+import { readOrEmpty } from '../repo-context.js';
 
 /**
  * Improver — polish an existing spec (usually codegen output) in the
@@ -114,13 +115,6 @@ function profileYaml(profile: unknown | null): string {
   return yamlStringify(profile).trim();
 }
 
-async function readOrEmpty(filePath: string): Promise<string> {
-  try {
-    return await fs.readFile(filePath, 'utf8');
-  } catch {
-    return '(none — file not found)';
-  }
-}
 
 export async function runImprover(
   input: ImproverInput,

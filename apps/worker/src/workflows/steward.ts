@@ -14,10 +14,16 @@ import {
   type TrendDeltas,
 } from '../activities/flake-analyzer.js';
 import { runPlaywrightSuite } from '../activities/suite-runner.js';
-import { withTenant } from '../db.js';
+import { withTenant, type Tenant } from '../db.js';
+import { loadRepoContext } from '../repo-context.js';
 import { complete } from '../llm.js';
 import { manifestLogger } from '../logger.js';
-import { appendEvent } from '../manifest-events.js';
+import {
+  appendEvent,
+  startManifest,
+  terminateManifest,
+  type WorkflowTerminal,
+} from '../manifest-events.js';
 
 export interface StewardManifestRow {
   id: string;
@@ -43,47 +49,6 @@ export interface StewardDeps {
 const DEFAULT_RUNS = 3;
 const MAX_RUNS = 10;
 
-interface RepoContext {
-  repoRoot: string;
-  repoName: string | null;
-  playwrightProject: string;
-}
-
-async function loadRepoContext(
-  pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
-  config: WorkerConfig,
-  repoId: string | null | undefined,
-): Promise<RepoContext> {
-  const fallback: RepoContext = {
-    repoRoot: config.repoRoot,
-    repoName: null,
-    playwrightProject: config.playwrightProject,
-  };
-  if (!repoId) return fallback;
-  return withTenant(pool, tenant, async (client) => {
-    const { rows } = await client.query<{
-      local_path: string | null;
-      full_name: string;
-      conventions: { playwright_detected?: { primaryProject?: string } } | null;
-    }>(
-      `SELECT r.local_path, r.full_name, p.conventions
-         FROM repositories r
-         LEFT JOIN repo_profiles p ON p.id = r.profile_id
-        WHERE r.id = $1`,
-      [repoId],
-    );
-    if (rows.length === 0) return fallback;
-    return {
-      repoRoot: rows[0].local_path ?? config.repoRoot,
-      repoName: rows[0].full_name,
-      playwrightProject:
-        config.playwrightProject ||
-        rows[0].conventions?.playwright_detected?.primaryProject ||
-        '',
-    };
-  });
-}
 
 /**
  * StewardWorkflow (Milestone D) — suite health via repeated full runs.
@@ -107,18 +72,12 @@ export async function runSteward(
   const runs = Math.min(Math.max(manifest.goal.params.runs ?? DEFAULT_RUNS, 1), MAX_RUNS);
   const repo = await loadRepoContext(deps.pool, tenant, deps.config, repoId ?? null);
 
-  await withTenant(deps.pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = 'in_progress', started_at = now() WHERE id = $1`,
-      [manifest.id],
-    );
-    await appendEvent(client, manifest, 'progress', 'assigned', 'in_progress', {
+  await startManifest(deps.pool, tenant, manifest, {
       stage: 'started',
       workflow: 'steward',
       repoRoot: repo.repoRoot,
       runs,
     });
-  });
   log.info({ stage: 'started', repoRoot: repo.repoRoot, runs }, 'Steward started');
 
   // ── 1+2. Run the suite K times, persisting as we go ────────────────────
@@ -332,27 +291,11 @@ export async function runSteward(
   });
 }
 
-async function terminate(
+const terminate = (
   pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
+  tenant: Tenant,
   manifest: StewardManifestRow,
-  status: 'succeeded' | 'rejected' | 'failed',
+  status: WorkflowTerminal,
   result: Record<string, unknown>,
-): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
-  await withTenant(pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = $2, finished_at = now(), result = $3::jsonb WHERE id = $1`,
-      [manifest.id, status, JSON.stringify({ status, ...result })],
-    );
-    await appendEvent(client, manifest, status, 'in_progress', status, result);
-  });
-  const message =
-    status === 'succeeded'
-      ? 'Steward report ready'
-      : String((result as { reason?: string }).reason ?? status);
-  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
-  const level = status === 'succeeded' ? 'info' : 'warn';
-  log[level]({ status }, message);
-  return { status, message };
-}
+) => terminateManifest(pool, tenant, manifest, status, result, 'Steward report ready');
 

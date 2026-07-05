@@ -4,9 +4,15 @@ import type { WorkerConfig } from '../config.js';
 import { runExplorer } from '../activities/explorer.js';
 import { runGenerator } from '../activities/generator.js';
 import { runJudge } from '../activities/judge.js';
-import { withTenant } from '../db.js';
+import { withTenant, type Tenant } from '../db.js';
+import { loadRepoContext } from '../repo-context.js';
 import { manifestLogger } from '../logger.js';
-import { appendEvent } from '../manifest-events.js';
+import {
+  appendEvent,
+  startManifest,
+  terminateManifest,
+  type WorkflowTerminal,
+} from '../manifest-events.js';
 
 export interface CoverageManifestRow {
   id: string;
@@ -25,42 +31,6 @@ export interface CoverageManifestRow {
   audit: { correlationId: string };
 }
 
-interface LoadedRepo {
-  repoRoot: string;
-  repoProfile: unknown | null;
-  repoName: string | null;
-}
-
-async function loadRepoContext(
-  pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
-  fallbackRoot: string,
-  repoId: string | null | undefined,
-): Promise<LoadedRepo> {
-  if (!repoId) return { repoRoot: fallbackRoot, repoProfile: null, repoName: null };
-  return withTenant(pool, tenant, async (client) => {
-    const { rows } = await client.query<{
-      local_path: string | null;
-      full_name: string;
-      conventions: unknown | null;
-    }>(
-      `SELECT r.local_path, r.full_name, p.conventions
-         FROM repositories r
-         LEFT JOIN repo_profiles p ON p.id = r.profile_id
-        WHERE r.id = $1`,
-      [repoId],
-    );
-    if (rows.length === 0) {
-      return { repoRoot: fallbackRoot, repoProfile: null, repoName: null };
-    }
-    const row = rows[0];
-    return {
-      repoRoot: row.local_path ?? fallbackRoot,
-      repoProfile: row.conventions ?? null,
-      repoName: row.full_name,
-    };
-  });
-}
 
 export interface CoverageDeps {
   pool: pg.Pool;
@@ -88,22 +58,16 @@ export async function runCoverage(
   const tenant = { orgId: manifest.org_id, workspaceId: manifest.workspace_id };
   const log = manifestLogger(manifest.id, manifest.audit.correlationId);
 
-  const repoContext = await loadRepoContext(deps.pool, tenant, deps.config.repoRoot, repoId);
+  const repoContext = await loadRepoContext(deps.pool, tenant, deps.config, repoId);
 
   // Transition to in_progress + record 'started' event.
-  await withTenant(deps.pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = 'in_progress', started_at = now() WHERE id = $1`,
-      [manifest.id],
-    );
-    await appendEvent(client, manifest, 'progress', 'assigned', 'in_progress', {
+  await startManifest(deps.pool, tenant, manifest, {
       stage: 'started',
       workflow: 'coverage',
       repoId,
       repoRoot: repoContext.repoRoot,
       hasProfile: repoContext.repoProfile !== null,
     });
-  });
   log.info(
     {
       stage: 'started',
@@ -250,29 +214,13 @@ export async function runCoverage(
   });
 }
 
-async function terminate(
+const terminate = (
   pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
+  tenant: Tenant,
   manifest: CoverageManifestRow,
-  status: 'succeeded' | 'rejected' | 'failed',
+  status: WorkflowTerminal,
   result: Record<string, unknown>,
-): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
-  await withTenant(pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests
-         SET status = $2, finished_at = now(), result = $3::jsonb
-       WHERE id = $1`,
-      [manifest.id, status, JSON.stringify({ status, ...result })],
-    );
-    await appendEvent(client, manifest, status, 'in_progress', status, result);
-  });
-  const message =
-    status === 'succeeded' ? 'Coverage complete' : String((result as { reason?: string }).reason ?? status);
-  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
-  const level = status === 'succeeded' ? 'info' : 'warn';
-  log[level]({ status, category: (result as { category?: string }).category }, message);
-  return { status, message };
-}
+) => terminateManifest(pool, tenant, manifest, status, result, 'Coverage complete');
 
 
 // short() + log() helpers removed — replaced by manifestLogger which

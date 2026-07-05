@@ -3,10 +3,16 @@ import type pg from 'pg';
 import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
 import { expandIncludeGlobs } from '../activities/stack-sources.js';
-import { withTenant } from '../db.js';
+import { withTenant, type Tenant } from '../db.js';
+import { loadRepoContext } from '../repo-context.js';
 import { manifestLogger } from '../logger.js';
 import { runTriage, type TriageManifestRow } from './triage.js';
-import { appendEvent } from '../manifest-events.js';
+import {
+  appendEvent,
+  startManifest,
+  terminateManifest,
+  type WorkflowTerminal,
+} from '../manifest-events.js';
 
 /**
  * BatchWorkflow (#14) — heal many specs under one parent manifest.
@@ -56,21 +62,6 @@ export interface BatchChildOutcome {
   message: string;
 }
 
-async function loadRepoRoot(
-  pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
-  fallback: string,
-  repoId: string | null | undefined,
-): Promise<string> {
-  if (!repoId) return fallback;
-  return withTenant(pool, tenant, async (client) => {
-    const { rows } = await client.query<{ local_path: string | null }>(
-      `SELECT local_path FROM repositories WHERE id = $1`,
-      [repoId],
-    );
-    return rows[0]?.local_path ?? fallback;
-  });
-}
 
 async function childrenSpendUSD(
   pool: pg.Pool,
@@ -96,7 +87,7 @@ export async function runBatch(
   const { repoId, specs: rawSpecs, glob } = manifest.goal.params;
   const maxCostUSD = manifest.budget?.maxCostUSD ?? DEFAULT_MAX_COST_USD;
 
-  const repoRoot = await loadRepoRoot(deps.pool, tenant, deps.config.repoRoot, repoId ?? null);
+  const { repoRoot } = await loadRepoContext(deps.pool, tenant, deps.config, repoId ?? null);
 
   // Resolve the spec list: explicit list wins; otherwise expand the glob
   // against the repo root.
@@ -108,19 +99,13 @@ export async function runBatch(
   }
   specs = Array.from(new Set(specs)).slice(0, MAX_CHILDREN);
 
-  await withTenant(deps.pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = 'in_progress', started_at = now() WHERE id = $1`,
-      [manifest.id],
-    );
-    await appendEvent(client, manifest, 'progress', 'assigned', 'in_progress', {
+  await startManifest(deps.pool, tenant, manifest, {
       stage: 'started',
       workflow: 'batch',
       specCount: specs.length,
       specs,
       maxCostUSD,
     });
-  });
   log.info({ stage: 'started', specCount: specs.length, maxCostUSD }, 'Batch started');
 
   if (specs.length === 0) {
@@ -281,30 +266,11 @@ export async function runBatch(
   });
 }
 
-async function terminate(
+const terminate = (
   pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
+  tenant: Tenant,
   manifest: BatchManifestRow,
-  status: 'succeeded' | 'rejected' | 'failed',
+  status: WorkflowTerminal,
   result: Record<string, unknown>,
-): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
-  await withTenant(pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = $2, finished_at = now(), result = $3::jsonb WHERE id = $1`,
-      [manifest.id, status, JSON.stringify({ status, ...result })],
-    );
-    await appendEvent(client, manifest, status, 'in_progress', status, {
-      ...result,
-      children: undefined, // keep the event row small; full list is in result + artifact
-    });
-  });
-  const message =
-    status === 'succeeded'
-      ? 'Batch complete'
-      : String((result as { reason?: string }).reason ?? status);
-  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
-  const level = status === 'succeeded' ? 'info' : 'warn';
-  log[level]({ status }, message);
-  return { status, message };
-}
+) => terminateManifest(pool, tenant, manifest, status, result, 'Batch complete');
 

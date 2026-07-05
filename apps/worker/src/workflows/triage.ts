@@ -15,9 +15,15 @@ import {
   loadRelatedSources,
 } from '../activities/stack-sources.js';
 import { FsCache } from '../cache.js';
-import { withTenant } from '../db.js';
+import { withTenant, type Tenant } from '../db.js';
+import { guessPageObjectPath, loadRepoContext } from '../repo-context.js';
 import { manifestLogger } from '../logger.js';
-import { appendEvent } from '../manifest-events.js';
+import {
+  appendEvent,
+  startManifest,
+  terminateManifest,
+  type WorkflowTerminal,
+} from '../manifest-events.js';
 
 export interface TriageManifestRow {
   id: string;
@@ -42,54 +48,7 @@ export interface TriageDeps {
   config: WorkerConfig;
 }
 
-interface RepoContext {
-  repoRoot: string;
-  repoProfile: unknown | null;
-  repoName: string | null;
-}
 
-async function loadRepoContext(
-  pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
-  fallbackRoot: string,
-  repoId: string | null | undefined,
-): Promise<RepoContext> {
-  if (!repoId) return { repoRoot: fallbackRoot, repoProfile: null, repoName: null };
-  return withTenant(pool, tenant, async (client) => {
-    const { rows } = await client.query<{
-      local_path: string | null;
-      full_name: string;
-      conventions: unknown | null;
-    }>(
-      `SELECT r.local_path, r.full_name, p.conventions
-         FROM repositories r
-         LEFT JOIN repo_profiles p ON p.id = r.profile_id
-        WHERE r.id = $1`,
-      [repoId],
-    );
-    if (rows.length === 0) return { repoRoot: fallbackRoot, repoProfile: null, repoName: null };
-    return {
-      repoRoot: rows[0].local_path ?? fallbackRoot,
-      repoProfile: rows[0].conventions ?? null,
-      repoName: rows[0].full_name,
-    };
-  });
-}
-
-async function guessPageObjectPath(repoRoot: string, specPath: string): Promise<string | null> {
-  const dir = path.dirname(specPath);
-  const base = path.basename(specPath).replace(/\.spec\.(tsx?)$/, '.page.$1');
-  const candidates = [path.join(dir, 'pages', base), path.join(dir, base)];
-  for (const rel of candidates) {
-    try {
-      await fs.access(path.join(repoRoot, rel));
-      return rel;
-    } catch {
-      /* keep trying */
-    }
-  }
-  return null;
-}
 
 /**
  * TriageWorkflow — v0 heal loop.
@@ -114,34 +73,21 @@ export async function runTriage(
     pageObjectPath: rawPagePath,
     includeGlobs,
   } = manifest.goal.params;
-  const repo = await loadRepoContext(deps.pool, tenant, deps.config.repoRoot, repoId ?? null);
+  const repo = await loadRepoContext(deps.pool, tenant, deps.config, repoId ?? null);
 
-  await withTenant(deps.pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = 'in_progress', started_at = now() WHERE id = $1`,
-      [manifest.id],
-    );
-    await appendEvent(client, manifest, 'progress', 'assigned', 'in_progress', {
+  await startManifest(deps.pool, tenant, manifest, {
       stage: 'started',
       workflow: 'triage',
       repoId: repoId ?? null,
       repoRoot: repo.repoRoot,
       testPath: rawTestPath,
     });
-  });
   log.info({ stage: 'started', testPath: rawTestPath, repoRoot: repo.repoRoot }, 'Triage started');
 
   const testPath = rawTestPath;
   const pageObjectPath = rawPagePath ?? (await guessPageObjectPath(repo.repoRoot, testPath));
 
-  // Resolve the Playwright project. Priority:
-  //   1. deps.config.playwrightProject (env override)
-  //   2. repoProfile.playwright_detected.primaryProject (auto-detected)
-  //   3. no --project — let Playwright default
-  const detected = ((repo.repoProfile as Record<string, unknown> | null)
-    ?.playwright_detected ?? null) as { primaryProject?: string } | null;
-  const resolvedProject =
-    deps.config.playwrightProject || detected?.primaryProject || '';
+  const resolvedProject = repo.playwrightProject;
 
   // ── 1. Baseline run ────────────────────────────────────────────────────
   const baseline = await runPlaywright(repo.repoRoot, testPath, deps.config.testTimeoutMs, {
@@ -512,27 +458,11 @@ export async function runTriage(
   });
 }
 
-async function terminate(
+const terminate = (
   pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
+  tenant: Tenant,
   manifest: TriageManifestRow,
-  status: 'succeeded' | 'rejected' | 'failed',
+  status: WorkflowTerminal,
   result: Record<string, unknown>,
-): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
-  await withTenant(pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = $2, finished_at = now(), result = $3::jsonb WHERE id = $1`,
-      [manifest.id, status, JSON.stringify({ status, ...result })],
-    );
-    await appendEvent(client, manifest, status, 'in_progress', status, result);
-  });
-  const message =
-    status === 'succeeded'
-      ? 'Triage complete'
-      : String((result as { reason?: string }).reason ?? status);
-  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
-  const level = status === 'succeeded' ? 'info' : 'warn';
-  log[level]({ status, category: (result as { category?: string }).category }, message);
-  return { status, message };
-}
+) => terminateManifest(pool, tenant, manifest, status, result, 'Triage complete');
 

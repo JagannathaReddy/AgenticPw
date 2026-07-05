@@ -3,9 +3,14 @@ import type pg from 'pg';
 import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
 import { runOnboarding } from '../activities/onboarding.js';
-import { withTenant } from '../db.js';
+import { withTenant, type Tenant } from '../db.js';
 import { manifestLogger } from '../logger.js';
-import { appendEvent } from '../manifest-events.js';
+import {
+  appendEvent,
+  startManifest,
+  terminateManifest,
+  type WorkflowTerminal,
+} from '../manifest-events.js';
 
 export interface OnboardingManifestRow {
   id: string;
@@ -46,18 +51,12 @@ export async function runOnboardingWorkflow(
   const log = manifestLogger(manifest.id, manifest.audit.correlationId);
   const { repoId, localPath } = goal.params;
 
-  await withTenant(deps.pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests SET status = 'in_progress', started_at = now() WHERE id = $1`,
-      [manifest.id],
-    );
-    await appendEvent(client, manifest, 'progress', 'assigned', 'in_progress', {
+  await startManifest(deps.pool, tenant, manifest, {
       stage: 'started',
       workflow: 'onboarding',
       repoId,
       localPath,
     });
-  });
   log.info({ stage: 'started', repoId, localPath }, 'Onboarding started');
 
   let extraction;
@@ -133,29 +132,11 @@ export async function runOnboardingWorkflow(
   });
 }
 
-async function terminate(
+const terminate = (
   pool: pg.Pool,
-  tenant: { orgId: string; workspaceId: string },
+  tenant: Tenant,
   manifest: OnboardingManifestRow,
-  status: 'succeeded' | 'rejected' | 'failed',
+  status: WorkflowTerminal,
   result: Record<string, unknown>,
-): Promise<{ status: 'succeeded' | 'rejected' | 'failed'; message: string }> {
-  await withTenant(pool, tenant, async (client) => {
-    await client.query(
-      `UPDATE manifests
-         SET status = $2, finished_at = now(), result = $3::jsonb
-       WHERE id = $1`,
-      [manifest.id, status, JSON.stringify({ status, ...result })],
-    );
-    await appendEvent(client, manifest, status, 'in_progress', status, result);
-  });
-  const message =
-    status === 'succeeded'
-      ? 'Onboarding complete'
-      : String((result as { reason?: string }).reason ?? status);
-  const log = manifestLogger(manifest.id, manifest.audit.correlationId);
-  const level = status === 'succeeded' ? 'info' : 'warn';
-  log[level]({ status, category: (result as { category?: string }).category }, message);
-  return { status, message };
-}
+) => terminateManifest(pool, tenant, manifest, status, result, 'Onboarding complete');
 

@@ -11,6 +11,7 @@ import type { Classification } from './classify-failure.js';
 import { GeneratorParseError } from './generator-parse.js';
 import { parseHealOutput, type HealParseResult } from './heal-parse.js';
 import { renderRelatedSources, type RelatedSource } from './stack-sources.js';
+import { readOrEmpty } from '../repo-context.js';
 
 export interface HealInput {
   manifestId: string;
@@ -55,13 +56,6 @@ function summarizeProfileForHealer(profile: unknown | null): string {
   ].join('\n');
 }
 
-async function readOrEmpty(filePath: string): Promise<string> {
-  try {
-    return await fs.readFile(filePath, 'utf8');
-  } catch {
-    return '(none — file not found)';
-  }
-}
 
 export async function runHeal(
   input: HealInput,
