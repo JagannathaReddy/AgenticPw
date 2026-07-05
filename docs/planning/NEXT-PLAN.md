@@ -207,3 +207,86 @@ Sprint 6: feedback→eval loop ──→ v0.10.0-eval-loop   (~1–2 days)
 Developer trial #2 runs whenever calendar allows — it doesn't block any
 sprint, and each shipped sprint makes it more informative.
 ```
+
+---
+
+# Q2-remaining plan (2026-07-06) — laptop-first re-interpretation
+
+The original Q2 (cloud plan) had six items. Triage shipped long ago and was
+exceeded (batch, feedback, quarantine). This plans the rest, translated to
+the laptop architecture; anything that only makes sense as a multi-team
+cloud service stays parked with its reason on record.
+
+## Disposition of original Q2 line items
+
+| Original Q2 item | Disposition |
+|---|---|
+| Triage Agent | ✅ shipped v0.2.0, exceeded through v0.10.0 |
+| Trust ladder rungs 2–5 | **Sprint 7** (rungs 2–3; 4–5 parked — see below) |
+| OPA policy engine | **Folded into Sprint 7** as a code-level policy evaluator; OPA-as-a-service parked (a policy *server* pays off with many services; we have two processes) |
+| Vector semantic recall | **Sprint 8** — pgvector finally earns its keep |
+| Slack App | **Sprint 9** as a webhook notifier; full Slack App (OAuth, slash commands) parked to cloud |
+| Prompt registry service | Parked — files + hash + eval already give solo-scale guarantees; a registry adds value when multiple teams publish prompts |
+| Eval ownership → QA infra team | N/A solo |
+
+## Sprint 7 — trust rungs 2–3 + policy enforcement (est. ~2 days) → `v0.11.0-trust`
+
+The design doc defined rung 1 only ("draft, review before merge" — today's
+dry-run + `apply`). Laptop-first ladder:
+
+- **Rung 1 (today):** dry-run diff; human runs `apply`.
+- **Rung 2 — auto-apply:** a verified heal/quarantine applies itself
+  (records the implicit 👍). Opt-in per submission (`--auto-apply`) and
+  honored only when `manifest.policy.trustRung >= 2`.
+- **Rung 3 — opens a PR:** CI heal mode gains `open-pr`: patched files
+  pushed to a branch + PR via github-script (`contents: write`). The
+  `canWritePR` policy flag finally does something.
+- **Rungs 4–5 (auto-merge / unattended):** parked — they encode
+  organizational trust, not code; nothing to build solo.
+
+Policy evaluator (the OPA-intent, no OPA): one `policy.ts` module the
+worker consults — refuseCategories (today: scattered), per-manifest
+maxCostUSD enforced in the LLM shim (today: only batch aggregates spend),
+trustRung gating the apply behavior. Pure + unit-tested.
+
+## Sprint 8 — semantic RAG on pgvector (est. ~2 days) → `v0.12.0-semantic-rag`
+
+Q2's "vector semantic recall", buildable and *provable* without waiting for
+a trial: the eval harness is the judge.
+
+1. Onboarding embeds spec files into `test_file_embeddings`
+   (text-embedding-3-small; metered like LLM calls).
+2. Generator few-shot picker: cosine similarity first, keyword-overlap
+   fallback when embeddings are absent (repo not re-onboarded) or the
+   API is unavailable — the v0 contract in rag-examples.ts already
+   promised exactly this swap.
+3. Feedback retrieval: most-similar-to-current-failure rows instead of
+   most-recent when a repo has >N feedback rows.
+4. **Proof or it didn't happen:** A/B eval slice — same generation goals,
+   keyword picker vs semantic picker, style-conformance scored. If the
+   slice shows no lift on this repo, we say so in the report and gate the
+   default on a bigger-suite trial.
+
+## Sprint 9 — webhook notifications (est. ~½ day) → `v0.13.0-notify`
+
+The Slack-App intent at laptop scale: `NOTIFY_WEBHOOK_URL` env (Slack
+incoming-webhook compatible). Worker posts terminal summaries — steward
+health headline, batch X/Y patched, quarantines applied. No OAuth, no app
+review, works with Slack/Discord/Teams. The full Slack App stays a cloud
+deliverable.
+
+## Sequence
+
+```
+Sprint 7: trust rungs 2–3 + policy ──→ v0.11.0-trust        (~2 days)
+   │
+Sprint 8: semantic RAG + A/B proof ──→ v0.12.0-semantic-rag (~2 days)
+   │
+Sprint 9: webhook notifications    ──→ v0.13.0-notify       (~½ day)
+```
+
+Ordering rationale: Sprint 7 is signal-independent and closes the gap
+between what `manifest.policy` *records* and what the system *enforces*;
+Sprint 8 carries its own proof via the eval harness; Sprint 9 is a
+quality-of-life capstone. The developer trial remains the standing
+validation item and can land anywhere in this sequence.
