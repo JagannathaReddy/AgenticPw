@@ -6,7 +6,7 @@ suite → get a health report that separates flaky from broken — then heal
 everything it flagged in one command, and rate the patches so the next heal
 is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 
-**Release:** `v0.7.0-ci` · previous tags: `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
+**Release:** `v0.8.0-steward-ci` · previous tags: `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
 ## What it does
 
@@ -84,11 +84,14 @@ npm run agent -- list                      # recent manifests
 ## CI mode
 
 [`.github/actions/heal`](.github/actions/heal/action.yml) boots the whole
-stack on a GitHub runner, batch-heals a spec glob, and posts verified diffs as
-a PR comment — dry-run, suggestions only, budget-capped, never gates CI.
-[heal-on-failure.yml](.github/workflows/heal-on-failure.yml) dogfoods it on
-this repo (same-repo PRs touching `tests/**`, plus a weekly run). Wire your
-key per [docs/guides/SECURITY-CI.md](docs/guides/SECURITY-CI.md).
+stack on a GitHub runner and, depending on `mode`, batch-heals a spec glob
+(verified diffs as a PR comment) or runs a steward suite-health report into
+the job summary — dry-run, suggestions only, budget-capped, never gates CI.
+This repo dogfoods both: [heal-on-failure.yml](.github/workflows/heal-on-failure.yml)
+on same-repo PRs touching `tests/**`, and [suite-health.yml](.github/workflows/suite-health.yml)
+weekly (flaky-vs-broken report, heal candidates chained to
+`agent batch --from-steward`). Wire your key per
+[docs/guides/SECURITY-CI.md](docs/guides/SECURITY-CI.md).
 
 ## How it works
 
@@ -173,5 +176,4 @@ The [docs index](docs/README.md) maps everything. Shortcuts:
 - GitHub App PR flow, WorkOS SSO, Temporal, sandboxed browser pool — the
   cloud v1 target, scoped in [the design doc](docs/design/Q1-TECHNICAL-DESIGN.md)
   and parked in [infra/future/](infra/future/)
-- Scheduled Steward runs in CI (the weekly CI job covers heal; steward-in-CI is a small follow-up)
 - pgvector semantic retrieval (installed, unused until generation quality needs it)

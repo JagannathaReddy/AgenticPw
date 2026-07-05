@@ -50,7 +50,7 @@ Usage:
   test-agent add "<goal>" --url <url> [--outcome "..."] [--outcome "..."] [--max-steps N] [--repo <shortId|uuid>]
   test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...] [--format github]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
-  test-agent steward [--repo <shortId|uuid>] [--runs N]    # suite health report (default 3 runs)
+  test-agent steward [--repo <shortId|uuid>] [--runs N] [--format github]   # suite health report (default 3 runs)
   test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N] [--format github]
   test-agent batch --from-steward <manifestId>             # heal every candidate from a report
   test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
@@ -646,16 +646,17 @@ function parseFormat(v: string | undefined): OutputFormat {
 /** Terminal hook that emits annotations + step summary + pr-comment.md. */
 function githubTerminalHook(): (m: AnyManifest) => Promise<void> {
   return async (m) => {
-    const { emitGithubReport, triageAsChild } = await import('./gh-format.js');
+    const gh = await import('./gh-format.js');
     const role = m.role ?? m.goal?.kind ?? '';
+    if (role === 'steward' || m.goal?.kind === 'suite_health') {
+      await gh.emitGithubStewardReport({ id: m.id, status: m.status, result: m.result });
+      return;
+    }
     const isBatch = role === 'orchestrator' || m.goal?.kind === 'batch_heal';
     const children = isBatch
       ? ((m.result?.children ?? []) as import('./gh-format.js').GhChild[])
-      : [triageAsChild(m)];
-    await emitGithubReport(
-      { id: m.id, status: m.status, result: m.result },
-      children,
-    );
+      : [gh.triageAsChild(m)];
+    await gh.emitGithubReport({ id: m.id, status: m.status, result: m.result }, children);
   };
 }
 
@@ -731,10 +732,12 @@ async function improveCommand(argv: string[]): Promise<void> {
 async function stewardCommand(argv: string[]): Promise<void> {
   let repoRef: string | undefined;
   let runs: number | undefined;
+  let format: OutputFormat = 'text';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--repo') repoRef = argv[++i];
     else if (a === '--runs') runs = Number(argv[++i]);
+    else if (a === '--format') format = parseFormat(argv[++i]);
     else if (a === '--help' || a === '-h') usage();
     else {
       process.stderr.write(`Unknown argument: ${a}\n`);
@@ -750,10 +753,14 @@ async function stewardCommand(argv: string[]): Promise<void> {
 
   process.stdout.write(`Submitting steward manifest (${runs ?? 3} full-suite runs)…\n\n`);
 
-  await submitAndWatch('/v1/stewards', {
-    ...(repoId ? { repoId } : {}),
-    ...(runs !== undefined ? { runs } : {}),
-  });
+  await submitAndWatch(
+    '/v1/stewards',
+    {
+      ...(repoId ? { repoId } : {}),
+      ...(runs !== undefined ? { runs } : {}),
+    },
+    format === 'github' ? { onTerminal: githubTerminalHook() } : {},
+  );
 }
 
 /** Copy one manifest's verified patch onto the original files. */

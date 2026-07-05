@@ -137,7 +137,7 @@ Cloud v1 (Temporal, WorkOS, gVisor, GitHub App) stays parked in
 `infra/future/` — explicitly out of scope for this plan. Everything below is
 laptop-first and comes from a deferral already recorded in the repo.
 
-## Sprint 4 — steward in CI (est. ~½ day) → `v0.8.0-steward-ci`
+## Sprint 4 — steward in CI (est. ~½ day) → `v0.8.0-steward-ci` ✅ SHIPPED 2026-07-06
 
 The README's own flag: "the CI schedule covers heal; steward-in-CI is a
 small follow-up." Completes the CI story — a weekly suite-health report

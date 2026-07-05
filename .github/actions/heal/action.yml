@@ -14,13 +14,21 @@
 # Read docs/guides/SECURITY-CI.md before wiring secrets.
 
 name: test-agent heal
-description: Batch-heal failing Playwright specs and post the diffs as suggestions
+description: Batch-heal failing Playwright specs (or run a steward suite-health report) and surface the results
 inputs:
   openai-api-key:
     description: LLM key (pass a repo/org secret; never a fork-accessible value)
     required: true
+  mode:
+    description: "'heal' = batch-heal the glob; 'steward' = suite-health report into the job summary"
+    required: false
+    default: 'heal'
+  runs:
+    description: Steward mode — how many full-suite runs (flake detection needs ≥2)
+    required: false
+    default: '3'
   glob:
-    description: Spec glob to heal
+    description: Spec glob to heal (heal mode only)
     required: false
     default: 'tests/**/*.spec.ts'
   max-cost:
@@ -45,6 +53,15 @@ outputs:
   total:
     description: Number of specs attempted
     value: ${{ steps.batch.outputs.total }}
+  steward-id:
+    description: Steward mode — manifest id to feed `agent batch --from-steward`
+    value: ${{ steps.steward.outputs.steward-id }}
+  heal-candidates:
+    description: Steward mode — count of always-failing specs with a healable category
+    value: ${{ steps.steward.outputs.heal-candidates }}
+  report-path:
+    description: Steward mode — steward-report artifact path on the runner
+    value: ${{ steps.steward.outputs.report-path }}
 
 runs:
   using: composite
@@ -89,7 +106,28 @@ runs:
         npx tsx scripts/test-agent.ts init . --name '${{ inputs.repo-name }}'
         npx tsx scripts/test-agent.ts repos
 
+    - name: Steward suite-health report
+      if: inputs.mode == 'steward'
+      id: steward
+      shell: bash
+      env:
+        TEST_AGENT_API: 'http://127.0.0.1:3001'
+      run: |
+        REPO_ID=$(npx tsx scripts/test-agent.ts repos | awk 'NR==1 {print $1}')
+        # Exit swallowed for the same reason as heal mode: an unhealthy suite
+        # is a report, not a CI failure.
+        npx tsx scripts/test-agent.ts steward \
+          --repo "$REPO_ID" \
+          --runs '${{ inputs.runs }}' \
+          --format github || true
+        grep -q '^steward-id=' "$GITHUB_OUTPUT" 2>/dev/null || {
+          echo 'steward-id='       >> "$GITHUB_OUTPUT"
+          echo 'heal-candidates=0' >> "$GITHUB_OUTPUT"
+          echo 'report-path='      >> "$GITHUB_OUTPUT"
+        }
+
     - name: Batch heal (dry-run, suggestions only)
+      if: inputs.mode != 'steward'
       id: batch
       shell: bash
       env:

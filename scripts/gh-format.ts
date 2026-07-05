@@ -224,6 +224,85 @@ export async function emitGithubReport(
   return commentPath;
 }
 
+interface StewardResult {
+  runs?: number;
+  totalTests?: number;
+  healthy?: number;
+  flaky?: number;
+  alwaysFailing?: number;
+  skipped?: number;
+  healCandidates?: string[] | null;
+  trends?: {
+    previousAt?: string;
+    newProblems?: string[];
+    fixed?: string[];
+    stillBroken?: string[];
+  } | null;
+  executiveSummary?: string;
+  reportPath?: string;
+}
+
+/**
+ * Steward variant (#Sprint 4): suite-health report into the job summary,
+ * warnings pinned to heal-candidate files, and outputs a follow-up
+ * workflow can chain into `agent batch --from-steward`.
+ */
+export async function emitGithubStewardReport(m: {
+  id: string;
+  status: string;
+  result?: Record<string, unknown>;
+}): Promise<void> {
+  const r = (m.result ?? {}) as StewardResult;
+  const candidates = r.healCandidates ?? [];
+
+  for (const file of candidates) {
+    process.stdout.write(
+      `::warning file=${file}::always failing with a healable category — ` +
+        `run: agent batch --from-steward ${m.id}\n`,
+    );
+  }
+
+  const lines: string[] = [
+    `## 🩺 Suite health — ${r.healthy ?? 0}/${r.totalTests ?? 0} healthy`,
+    '',
+    `${r.runs ?? '?'} full-suite runs · steward \`${m.id.slice(0, 8)}\``,
+    '',
+    '| verdict | count |',
+    '|---------|-------|',
+    `| ✅ healthy | ${r.healthy ?? 0} |`,
+    `| 🎲 flaky | ${r.flaky ?? 0} |`,
+    `| ❌ always failing | ${r.alwaysFailing ?? 0} |`,
+    `| ⏭ skipped | ${r.skipped ?? 0} |`,
+    '',
+  ];
+  if (r.executiveSummary) {
+    lines.push(r.executiveSummary.trim(), '');
+  }
+  if (candidates.length > 0) {
+    lines.push(`### Heal candidates (${candidates.length})`, '');
+    for (const f of candidates) lines.push(`- \`${f}\``);
+    lines.push('', `Heal them all: \`npm run agent -- batch --from-steward ${m.id}\``, '');
+  }
+  const t = r.trends;
+  if (t && ((t.newProblems?.length ?? 0) + (t.fixed?.length ?? 0) + (t.stillBroken?.length ?? 0) > 0)) {
+    lines.push(`### Since last report${t.previousAt ? ` (${t.previousAt.slice(0, 10)})` : ''}`, '');
+    if (t.fixed?.length) lines.push(`- ✅ Fixed (${t.fixed.length}): ${t.fixed.join(', ')}`);
+    if (t.newProblems?.length) lines.push(`- 🆕 Broken (${t.newProblems.length}): ${t.newProblems.join(', ')}`);
+    if (t.stillBroken?.length) lines.push(`- ⏳ Still broken (${t.stillBroken.length}): ${t.stillBroken.join(', ')}`);
+    lines.push('');
+  }
+  await appendFileIfSet('GITHUB_STEP_SUMMARY', lines.join('\n'));
+
+  await appendFileIfSet(
+    'GITHUB_OUTPUT',
+    [
+      `steward-id=${m.id}`,
+      `heal-candidates=${candidates.length}`,
+      `report-path=${r.reportPath ?? ''}`,
+    ].join('\n'),
+  );
+}
+
 /** Adapt a single triage manifest to the one-child shape. */
 export function triageAsChild(m: {
   id: string;

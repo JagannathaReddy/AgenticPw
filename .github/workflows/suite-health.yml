@@ -1,0 +1,74 @@
+# Sprint 4: weekly steward suite-health report in CI.
+#
+# Runs the whole Playwright suite N times on the runner, separates flaky
+# from broken, and puts the health report in the job summary. Heal
+# candidates come out as ::warning annotations plus a `steward-id` output —
+# feed it to `agent batch --from-steward` (locally or in a follow-up job)
+# to fix everything it flagged.
+#
+# Never fails the job: an unhealthy suite is a report, not a CI failure.
+# Secret handling identical to heal-on-failure.yml; see
+# docs/guides/SECURITY-CI.md.
+
+name: suite-health
+
+on:
+  schedule:
+    - cron: '0 5 * * 1' # Mondays 05:00 UTC — an hour before heal-on-failure
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Full-suite runs (flake detection needs ≥2)
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: suite-health-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+
+jobs:
+  steward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Skip when no LLM key is configured
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::OPENAI_API_KEY secret not set — suite-health skipped." && exit 0
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+
+      - uses: actions/setup-node@v4
+        if: env.HAS_KEY == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Steward suite-health report
+        if: env.HAS_KEY == 'true'
+        id: steward
+        uses: ./.github/actions/heal
+        with:
+          mode: steward
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          runs: ${{ github.event.inputs.runs || '3' }}
+          repo-name: agenticpw-ci
+
+      - name: Upload steward report artifact
+        if: env.HAS_KEY == 'true' && steps.steward.outputs.report-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: steward-report
+          path: ${{ steps.steward.outputs.report-path }}
+          if-no-files-found: ignore
+
+      - name: Heal-candidates notice
+        if: env.HAS_KEY == 'true' && steps.steward.outputs.heal-candidates != '0'
+        run: >-
+          echo "::notice::${{ steps.steward.outputs.heal-candidates }} heal candidate(s).
+          Fix them all locally: npm run agent -- batch --from-steward ${{ steps.steward.outputs.steward-id }}"
