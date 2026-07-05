@@ -159,6 +159,7 @@ async function runOne(triple: EvalTriple): Promise<TripleResult> {
     return {
       tripleId: triple.id,
       role: triple.role,
+      tags: triple.tags ?? [],
       passed: false,
       metrics: [],
       llmCostUSD: 0,
@@ -183,6 +184,7 @@ async function runOne(triple: EvalTriple): Promise<TripleResult> {
     return {
       tripleId: triple.id,
       role: triple.role,
+      tags: triple.tags ?? [],
       passed,
       metrics,
       llmCostUSD: llm.costUSD,
@@ -195,6 +197,7 @@ async function runOne(triple: EvalTriple): Promise<TripleResult> {
     return {
       tripleId: triple.id,
       role: triple.role,
+      tags: triple.tags ?? [],
       passed: false,
       metrics: [],
       llmCostUSD: 0,

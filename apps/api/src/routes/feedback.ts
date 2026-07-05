@@ -98,6 +98,26 @@ export function registerFeedbackRoutes(app: FastifyInstance, db: Db): void {
     return reply.code(201).send(outcome.body);
   });
 
+  // All feedback rows for one manifest — `agent feedback --promote` reads
+  // the recorded verdict + note from here. Registered before /stats would
+  // clash, so keep the literal route first.
+  app.get<{ Params: { manifestId: string } }>(
+    '/v1/feedback/manifest/:manifestId',
+    async (request, reply) => {
+      const rows = await withTenant(db, request.tenant, async (client) => {
+        const { rows } = await client.query(
+          `SELECT verdict, source, category, test_path, note, created_at
+             FROM heal_feedback
+            WHERE manifest_id = $1
+            ORDER BY created_at DESC`,
+          [request.params.manifestId],
+        );
+        return rows;
+      });
+      return reply.send(rows);
+    },
+  );
+
   // Aggregate accept-rates the eval harness and `agent feedback --stats` read.
   app.get('/v1/feedback/stats', async (request, reply) => {
     const stats = await withTenant(db, request.tenant, async (client) => {

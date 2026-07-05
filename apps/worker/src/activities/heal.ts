@@ -78,21 +78,31 @@ export async function runHeal(
     ? await readOrEmpty(pageAbsPath)
     : '(none — spec has no separate POM)';
 
+  const variables = {
+    test_path: input.testPath,
+    page_object_path: input.pageObjectPath ?? '(none)',
+    failure_category: input.classification.category,
+    failure_summary: input.classification.summary,
+    failure_output_tail: input.failureOutputTail.slice(-2000),
+    spec_source: specSource,
+    page_object_source: pageObjectSource,
+    aria_snapshot: input.ariaSnapshot,
+    repo_profile: summarizeProfileForHealer(input.repoProfile),
+    related_sources: renderRelatedSources(input.relatedSources),
+    prior_feedback: input.priorFeedback,
+  };
+
+  // Persist the exact prompt inputs — `agent feedback --promote` turns a
+  // rated heal into an eval triple from this, byte-identical to what the
+  // model saw (repo files may drift after apply).
+  await artifacts.put(
+    `${input.manifestId}/heal-input.json`,
+    JSON.stringify(variables, null, 2),
+  );
+
   const prompt = await loadPrompt({
     role: 'healer',
-    variables: {
-      test_path: input.testPath,
-      page_object_path: input.pageObjectPath ?? '(none)',
-      failure_category: input.classification.category,
-      failure_summary: input.classification.summary,
-      failure_output_tail: input.failureOutputTail.slice(-2000),
-      spec_source: specSource,
-      page_object_source: pageObjectSource,
-      aria_snapshot: input.ariaSnapshot,
-      repo_profile: summarizeProfileForHealer(input.repoProfile),
-      related_sources: renderRelatedSources(input.relatedSources),
-      prior_feedback: input.priorFeedback,
-    },
+    variables,
   });
 
   const response = await complete(

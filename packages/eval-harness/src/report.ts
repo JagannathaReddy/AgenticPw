@@ -30,6 +30,20 @@ export function renderMarkdown(run: EvalRun, baseline: Baseline | null): string 
   lines.push(`Total LLM cost: $${run.totalCostUSD.toFixed(4)}`);
   lines.push('');
 
+  // Real-world slice: triples promoted from rated heals vs hand-written.
+  const eligible = run.triples.filter((t) => !t.skipped);
+  const promoted = eligible.filter((t) => t.tags.includes('promoted'));
+  if (promoted.length > 0) {
+    const hand = eligible.filter((t) => !t.tags.includes('promoted'));
+    const rate = (ts: typeof eligible) =>
+      ts.length === 0 ? '—' : `${ts.filter((t) => t.passed).length}/${ts.length}`;
+    lines.push(`## Real-world slice`);
+    lines.push('');
+    lines.push(`- promoted from rated heals: ${rate(promoted)} passing`);
+    lines.push(`- hand-written corpus: ${rate(hand)} passing`);
+    lines.push('');
+  }
+
   for (const t of run.triples) {
     const status = t.skipped ? `(skipped: ${t.skipped})` : t.passed ? 'PASS' : 'FAIL';
     lines.push(`## ${t.tripleId} — ${status}`);

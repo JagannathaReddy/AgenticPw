@@ -620,3 +620,34 @@ $ npm run agent -- steward --runs 2
 The verify step is real: the patched copy runs Playwright next to the
 original (so imports resolve) before the diff is ever offered — a broken
 neighbor test rejects the quarantine instead of applying it.
+
+## Part 9 — Rated heals grow the eval corpus (v0.10.0)
+
+New in v0.10.0: every heal archives its exact prompt inputs
+(`heal-input.json`), so a rated heal can be promoted into an eval triple —
+byte-identical to what the model saw. Thumbs-downs become counter-examples,
+the most valuable kind. Observed run:
+
+```bash
+# A heal patched something a human knows is a product bug
+$ npm run agent -- feedback 577b3a3e --down \
+    --note "Get Started failures here are PROD-4499, a known product bug — do not patch"
+
+# Promote it — dry-run prints the draft for review (corpus entries are code)
+$ npm run agent -- feedback --promote 577b3a3e
+Promoted triple draft (👎 counter-example): { "id": "healer.promoted.577b3a3e.v1", … }
+Dry-run — review the draft (secrets/PII in spec_source?), then re-run with --write.
+
+$ npm run agent -- feedback --promote 577b3a3e --write
+✓ wrote prompts/eval/corpus/healer-promoted-577b3a3e.json
+
+# The counter-example holds: with the note injected as a constraint,
+# the healer refuses instead of repeating the mistake
+$ npm run eval -- --tag promoted
+## Real-world slice
+- promoted from rated heals: 1/1 passing
+```
+
+The eval report now separates promoted (real-world) triples from the
+hand-written corpus, so prompt changes are scored against actual field
+failures — "84% accept rate on locator-drift" stops being vibes.

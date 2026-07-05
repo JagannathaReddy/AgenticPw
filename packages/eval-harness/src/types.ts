@@ -55,6 +55,7 @@ export interface MetricResult {
 export interface TripleResult {
   tripleId: string;
   role: Role;
+  tags: string[];
   passed: boolean;
   metrics: MetricResult[];
   llmCostUSD: number;

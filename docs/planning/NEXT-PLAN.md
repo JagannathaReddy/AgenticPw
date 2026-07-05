@@ -171,7 +171,7 @@ the shape follows the heal pattern exactly:
 4. Smoke: flaky demo test → quarantine diff → apply → suite green →
    steward shows it under quarantined, not healthy.
 
-## Sprint 6 — feedback grows the eval corpus (est. ~1–2 days) → `v0.10.0-eval-loop`
+## Sprint 6 — feedback grows the eval corpus (est. ~1–2 days) → `v0.10.0-eval-loop` ✅ SHIPPED 2026-07-06
 
 The unbuilt "optional" half of issue #16: today feedback teaches the
 *healer prompt*; it should also grow the *eval corpus* so prompt changes

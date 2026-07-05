@@ -57,7 +57,7 @@ Usage:
   test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent feedback <manifestId> --up|--down [--note "..."]   # rate a heal (apply records --up for you)
-  test-agent feedback --stats                              # accept-rates per category / prompt version
+  test-agent feedback --stats                              # accept-rates per category / prompt version\n  test-agent feedback --promote <manifestId> [--write]     # turn a rated heal into an eval triple
   test-agent get <manifestId>
   test-agent list
 
@@ -985,22 +985,118 @@ interface FeedbackStats {
   }>;
 }
 
+/**
+ * Turn a rated heal into an eval triple (Sprint 6). Inputs come from the
+ * heal-input.json artifact — byte-identical to what the model saw. Prints
+ * the draft for review by default; --write persists it. Corpus entries are
+ * code: review for secrets/PII in spec_source before committing.
+ */
+async function promoteFeedback(manifestId: string, write: boolean): Promise<void> {
+  const m = await apiCall<AnyManifest>(`/v1/tests/${manifestId}`);
+  const role = m.role ?? m.goal?.kind ?? '';
+  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) {
+    process.stderr.write(`--promote works on heal manifests; ${manifestId.slice(0, 8)} is role=${role}.\n`);
+    process.exit(2);
+  }
+
+  const rows = await apiCall<Array<{ verdict: 'up' | 'down'; source: string; note: string | null }>>(
+    `/v1/feedback/manifest/${manifestId}`,
+  );
+  if (rows.length === 0) {
+    process.stderr.write('No feedback recorded for this manifest — rate it first (apply, or feedback --up/--down).\n');
+    process.exit(1);
+  }
+  // Latest explicit verdict wins over the implicit apply-vote.
+  const row = rows.find((r) => r.source === 'explicit') ?? rows[0];
+
+  const fs = await import('node:fs/promises');
+  const inputPath = `local-artifacts/${manifestId}/heal-input.json`;
+  let vars: Record<string, string>;
+  try {
+    vars = JSON.parse(await fs.readFile(inputPath, 'utf8')) as Record<string, string>;
+  } catch {
+    process.stderr.write(
+      `${inputPath} not found — this heal predates v0.10.0 (inputs weren't archived). Re-run the heal and promote that manifest.\n`,
+    );
+    process.exit(1);
+  }
+
+  const short = manifestId.slice(0, 8);
+  if (row.verdict === 'down' && row.note) {
+    // The rejection note becomes the constraint the promoted triple tests.
+    vars.prior_feedback = [
+      '1 previous patch rejected by a human reviewer.',
+      '',
+      'Most instructive verdicts:',
+      `- REJECTED ${vars.test_path} (${vars.failure_category}): "${row.note.replace(/"/g, "'")}"`,
+      '',
+      'REJECTED notes are corrections from a human who saw a previous patch fail in this repo. Treat them as constraints — do not repeat those mistakes.',
+    ].join('\n');
+  }
+
+  const expected =
+    row.verdict === 'up'
+      ? { testFile: { mustContain: ['===FILE:'], mustNotContain: ['===REFUSE==='] } }
+      : { testFile: { mustContain: ['===REFUSE==='], mustNotContain: ['===FILE:'] } };
+
+  const triple = {
+    id: `healer.promoted.${short}.v1`,
+    role: 'healer',
+    tags: ['feedback', 'promoted', `promoted-${row.verdict}`],
+    difficulty: 'medium',
+    input: { extraVariables: vars },
+    expected,
+    metrics: { costMaxUSD: 0.01, latencyMaxMs: 60000 },
+  };
+
+  const target = `prompts/eval/corpus/healer-promoted-${short}.json`;
+  const body = JSON.stringify(triple, null, 2) + '\n';
+
+  process.stdout.write(`Promoted triple draft (${row.verdict === 'up' ? '👍 confirms a good patch' : '👎 counter-example'}):\n\n`);
+  process.stdout.write(body);
+  process.stdout.write(`\ntarget: ${target}\n`);
+  if (row.verdict === 'down') {
+    process.stdout.write(
+      '\nDefault expectation for a 👎 is refusal under the injected constraint.\n' +
+      'If the correct behavior is a *different patch*, edit expected.testFile before committing.\n',
+    );
+  }
+  if (!write) {
+    process.stdout.write('\nDry-run — review the draft (secrets/PII in spec_source?), then re-run with --write.\n');
+    return;
+  }
+  await fs.writeFile(target, body);
+  process.stdout.write(`\n✓ wrote ${target} — review + commit it, then: npm run eval -- --tag promoted\n`);
+}
+
 async function feedbackCommand(argv: string[]): Promise<void> {
   let id = '';
   let verdict: 'up' | 'down' | '' = '';
   let note: string | undefined;
   let stats = false;
+  let promote = false;
+  let write = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--up') verdict = 'up';
     else if (a === '--down') verdict = 'down';
     else if (a === '--note') note = argv[++i];
     else if (a === '--stats') stats = true;
+    else if (a === '--promote') promote = true;
+    else if (a === '--write') write = true;
     else if (a === '--help' || a === '-h') usage();
     else if (a.startsWith('-')) {
       process.stderr.write(`Unknown flag: ${a}\n`);
       usage();
     } else if (!id) id = a;
+  }
+
+  if (promote) {
+    if (!id) {
+      process.stderr.write('Usage: test-agent feedback --promote <manifestId> [--write]\n');
+      process.exit(2);
+    }
+    return promoteFeedback(id, write);
   }
 
   if (stats) {

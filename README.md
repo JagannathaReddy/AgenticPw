@@ -6,7 +6,7 @@ suite → get a health report that separates flaky from broken — then heal
 everything it flagged in one command, and rate the patches so the next heal
 is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 
-**Release:** `v0.9.0-quarantine` · previous tags: `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
+**Release:** `v0.10.0-eval-loop` · previous tags: `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
 ## What it does
 
@@ -75,6 +75,7 @@ npm run agent -- apply --batch <batchId>
 # Teach it: apply already records a 👍; corrections carry the signal
 npm run agent -- feedback <manifestId> --down --note "text is localized — use getByTestId"
 npm run agent -- feedback --stats          # accept-rates per category / prompt version
+npm run agent -- feedback --promote <id> --write   # rated heal → eval corpus triple
 
 # Housekeeping
 npm run agent -- doctor                    # one-shot environment health check
