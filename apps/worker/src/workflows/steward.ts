@@ -8,6 +8,7 @@ import {
   analyzeRuns,
   computeTrends,
   healCandidates,
+  flakyTargets,
   renderHealthReport,
   type RunBatch,
   type SuiteHealthReport,
@@ -286,6 +287,7 @@ export async function runSteward(
     alwaysFailing: report.alwaysFailing,
     skipped: report.skipped,
     healCandidates: candidates,
+    flakyTests: flakyTargets(report),
     trends,
     executiveSummary,
   });

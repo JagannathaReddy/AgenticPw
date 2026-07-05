@@ -158,6 +158,22 @@ export function healCandidates(report: SuiteHealthReport): string[] {
   );
 }
 
+export interface FlakyTarget {
+  file: string;
+  title: string;
+}
+
+/**
+ * Quarantine targets: tests the analyzer judged flaky (mixed pass/fail or
+ * retry-dependent). This is what `agent quarantine --from-steward` consumes —
+ * (file, title) pairs because quarantine wraps individual tests, not files.
+ */
+export function flakyTargets(report: SuiteHealthReport): FlakyTarget[] {
+  return report.tests
+    .filter((t) => t.verdict === 'flaky')
+    .map((t) => ({ file: t.file, title: t.title }));
+}
+
 export interface TrendDeltas {
   previousAt: string;
   /** Tests healthy/absent last report, flaky or always_failing now. */
@@ -279,7 +295,7 @@ export function renderHealthReport(
       } else if (t.verdict === 'always_failing') {
         lines.push(`- \`${t.file}\` fails consistently (**${t.category ?? 'unclassified'}**) — likely needs a human; heal would refuse this category.`);
       } else {
-        lines.push(`- \`${t.file}\` is flaky (${t.passCount}/${t.runsSeen} passed) — check for shared state, ordering, or missing waits before quarantining.`);
+        lines.push(`- \`${t.file}\` is flaky (${t.passCount}/${t.runsSeen} passed) — check for shared state, ordering, or missing waits, or quarantine it: \`npm run agent -- quarantine --from-steward <manifestId>\``);
       }
     }
     lines.push('');
@@ -287,6 +303,22 @@ export function renderHealthReport(
     lines.push(`## Problem tests`);
     lines.push('');
     lines.push(`None. Every test passed in every run with no retries. 🎉`);
+    lines.push('');
+  }
+
+  const quarantined = report.tests.filter((t) => t.verdict === 'skipped');
+  if (quarantined.length > 0) {
+    lines.push(`## Quarantined / skipped (${quarantined.length})`);
+    lines.push('');
+    lines.push(
+      `These tests never ran (test.fixme / test.skip). They stay listed here so ` +
+        `they don't rot silently — periodically remove the fixme and re-run steward ` +
+        `to see if they've recovered.`,
+    );
+    lines.push('');
+    for (const t of quarantined) {
+      lines.push(`- \`${t.file}\` › ${t.title}`);
+    }
     lines.push('');
   }
 

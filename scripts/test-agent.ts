@@ -53,6 +53,7 @@ Usage:
   test-agent steward [--repo <shortId|uuid>] [--runs N] [--format github]   # suite health report (default 3 runs)
   test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N] [--format github]
   test-agent batch --from-steward <manifestId>             # heal every candidate from a report
+  test-agent quarantine --from-steward <manifestId>        # wrap flagged flaky tests in test.fixme
   test-agent apply --batch <manifestId>                    # apply all verified patches from a batch
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent feedback <manifestId> --up|--down [--note "..."]   # rate a heal (apply records --up for you)
@@ -267,6 +268,19 @@ function printTerminal(m: AnyManifest): void {
         process.stdout.write('\n');
         process.stdout.write(`Apply the patch:  npm run agent -- apply ${m.id}\n`);
       }
+    } else if (role === 'quarantiner' || m.goal?.kind === 'quarantine_flaky') {
+      const files = (r.files ?? []) as Array<{
+        originalTestPath: string;
+        quarantined: string[];
+        skipped: Array<{ title: string; reason?: string }>;
+      }>;
+      process.stdout.write(`✓ Quarantine: ${String(r.totalQuarantined)} test(s) wrapped in test.fixme (dry-run — nothing on disk changed)\n`);
+      for (const f of files) {
+        for (const t of f.quarantined) process.stdout.write(`  🔒 ${f.originalTestPath} › ${t}\n`);
+        for (const sk of f.skipped) process.stdout.write(`  ⚠ ${f.originalTestPath} › ${sk.title} — ${sk.reason ?? 'skipped'}\n`);
+      }
+      process.stdout.write('\n');
+      process.stdout.write(`Apply the quarantine:  npm run agent -- apply ${m.id}\n`);
     } else if (role === 'orchestrator' || m.goal?.kind === 'batch_heal') {
       const children = (r.children ?? []) as Array<{
         manifestId: string;
@@ -345,6 +359,9 @@ function printTerminal(m: AnyManifest): void {
 async function emitDiffIfTriageSucceeded(m: AnyManifest): Promise<void> {
   const role = m.role ?? m.goal?.kind ?? 'coverage';
   if (m.status !== 'succeeded') return;
+  if (role === 'quarantiner' || m.goal?.kind === 'quarantine_flaky') {
+    return emitQuarantineDiffs(m);
+  }
   const isTriage = role === 'triage' || m.goal?.kind === 'heal_test';
   const isImprove = role === 'improver' || m.goal?.kind === 'improve_test';
   if (!isTriage && !isImprove) return;
@@ -371,6 +388,30 @@ async function emitDiffIfTriageSucceeded(m: AnyManifest): Promise<void> {
   process.stdout.write('\nDiff:\n');
   for (const line of diffText.split('\n')) {
     process.stdout.write(`  ${line}\n`);
+  }
+}
+
+async function emitQuarantineDiffs(m: AnyManifest): Promise<void> {
+  const files = ((m.result ?? {}).files ?? []) as Array<{
+    originalTestPath: string;
+    patchedTestPath: string;
+  }>;
+  const fs = await import('node:fs/promises');
+  const { renderUnifiedDiff } = await import('./diff.js');
+  for (const f of files) {
+    if (!f.patchedTestPath) continue;
+    const [orig, patched] = await Promise.all([
+      fs.readFile(f.originalTestPath, 'utf8').catch(() => ''),
+      fs.readFile(f.patchedTestPath, 'utf8').catch(() => ''),
+    ]);
+    if (!orig || !patched) continue;
+    process.stdout.write(`\nDiff (${f.originalTestPath}):\n`);
+    const text = renderUnifiedDiff(orig, patched, {
+      aLabel: f.originalTestPath,
+      bLabel: f.patchedTestPath,
+      contextLines: 2,
+    });
+    for (const line of text.split('\n')) process.stdout.write(`  ${line}\n`);
   }
 }
 
@@ -772,7 +813,10 @@ async function stewardCommand(argv: string[]): Promise<void> {
  */
 async function recordApplyFeedback(m: AnyManifest, opts: { quiet?: boolean }): Promise<void> {
   const role = m.role ?? '';
-  if (!(role === 'triage' || m.goal?.kind === 'heal_test')) return;
+  const eligible =
+    role === 'triage' || m.goal?.kind === 'heal_test' ||
+    role === 'quarantiner' || m.goal?.kind === 'quarantine_flaky';
+  if (!eligible) return;
   try {
     const res = await fetch(`${API_BASE}/v1/feedback`, {
       method: 'POST',
@@ -799,6 +843,26 @@ async function applyOne(m: AnyManifest, opts: { quiet?: boolean } = {}): Promise
     return false;
   }
   const r = m.result ?? {};
+  if (m.role === 'quarantiner' || m.goal?.kind === 'quarantine_flaky') {
+    const files = (r.files ?? []) as Array<{
+      originalTestPath: string;
+      patchedTestPath: string;
+    }>;
+    const fsq = await import('node:fs/promises');
+    let applied = 0;
+    for (const f of files) {
+      if (!f.patchedTestPath) continue;
+      await fsq.copyFile(f.patchedTestPath, f.originalTestPath);
+      process.stdout.write(`✓ overwrote ${f.originalTestPath}\n`);
+      applied++;
+    }
+    if (applied === 0) {
+      if (!opts.quiet) process.stderr.write(`Manifest ${id.slice(0, 8)} has no quarantined files to apply.\n`);
+      return false;
+    }
+    await recordApplyFeedback(m, opts);
+    return true;
+  }
   const originalTestPath = r.originalTestPath as string | undefined;
   const patchedTestPath = r.patchedTestPath as string | undefined;
   const patchedPageObjectPath = r.patchedPageObjectPath as string | undefined;
@@ -887,7 +951,8 @@ async function applyCommand(argv: string[]): Promise<void> {
   const role = m.role ?? m.goal?.kind ?? '';
   const isTriage = role === 'triage' || m.goal?.kind === 'heal_test';
   const isImprove = role === 'improver' || m.goal?.kind === 'improve_test';
-  if (!isTriage && !isImprove) {
+  const isQuarantine = role === 'quarantiner' || m.goal?.kind === 'quarantine_flaky';
+  if (!isTriage && !isImprove && !isQuarantine) {
     process.stderr.write(
       `Manifest ${id.slice(0, 8)} is role=${role}; apply only works on triage/improve manifests (or --batch <id>).\n`,
     );
@@ -1056,6 +1121,35 @@ async function batchCommand(argv: string[]): Promise<void> {
   );
 }
 
+async function quarantineCommand(argv: string[]): Promise<void> {
+  let fromSteward = '';
+  let repoRef: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--from-steward') fromSteward = argv[++i] ?? '';
+    else if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--help' || a === '-h') usage();
+    else {
+      process.stderr.write(`Unknown argument: ${a}\n`);
+      usage();
+    }
+  }
+  if (!fromSteward) {
+    process.stderr.write('Required: --from-steward <manifestId> (a succeeded steward report)\n');
+    process.exit(2);
+  }
+
+  const repoId = await resolveRepoOption(repoRef, null);
+
+  process.stdout.write(`Submitting quarantine…\n`);
+  process.stdout.write(`  from steward report: ${fromSteward.slice(0, 8)}\n\n`);
+
+  await submitAndWatch('/v1/quarantines', {
+    fromManifestId: fromSteward,
+    ...(repoId ? { repoId } : {}),
+  });
+}
+
 async function reposCommand(): Promise<void> {
   const list = await apiCall<
     Array<{ id: string; name: string; localPath: string; status: string; profileId?: string }>
@@ -1089,6 +1183,8 @@ async function main(): Promise<void> {
       return stewardCommand(rest);
     case 'batch':
       return batchCommand(rest);
+    case 'quarantine':
+      return quarantineCommand(rest);
     case 'apply':
       return applyCommand(rest);
     case 'feedback':

@@ -51,10 +51,10 @@ export function registerFeedbackRoutes(app: FastifyInstance, db: Db): void {
       );
       if (rows.length === 0) return { code: 404 as const, error: 'Manifest not found' };
       const m = rows[0];
-      if (m.role !== 'triage') {
+      if (m.role !== 'triage' && m.role !== 'quarantiner') {
         return {
           code: 422 as const,
-          error: `Feedback targets heals; manifest ${input.manifestId} has role '${m.role}'.`,
+          error: `Feedback targets heals/quarantines; manifest ${input.manifestId} has role '${m.role}'.`,
         };
       }
 

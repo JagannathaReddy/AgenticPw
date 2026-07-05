@@ -582,3 +582,41 @@ bash scripts/db-reset.sh
 ## Costs from this demo
 
 Each successful run of the "click Get Started" example used **~$0.0014** of GPT-4o-mini tokens. At scale that puts a fully generated + tested spec well under a cent.
+
+## Part 8 — Quarantine the flake (v0.9.0)
+
+New in v0.9.0: steward-flagged flaky tests get wrapped in `test.fixme` through
+the same dry-run → apply → feedback machinery as heals. Deterministic — no
+LLM call, $0. Observed run (state-toggle flaky test seeded in
+`tests/flakydemo/`):
+
+```bash
+# 1. Steward catches it — including the sneaky passed-only-via-retries kind
+$ npm run agent -- steward --runs 2
+  9 tests × 2 runs — 8 healthy · 1 flaky · 0 always-failing
+
+# 2. Quarantine everything flagged — dry-run diff, verified before offered
+$ npm run agent -- quarantine --from-steward ba3ca389
+  [  1.5s] progress · file_quarantined — verified=true
+Diff (tests/flakydemo/flaky.spec.ts):
+  -  test('toggles between pass and fail', async () => {
+  +  // quarantined 2026-07-05 by test-agent steward — flaky; remove .fixme to retry
+  +  test.fixme('toggles between pass and fail', async () => {
+✓ Quarantine: 1 test(s) wrapped in test.fixme (dry-run — nothing on disk changed)
+
+# 3. Apply — records a 👍 like heals do, so a wrong quarantine can be corrected
+$ npm run agent -- apply 2eea81cb-…
+✓ overwrote tests/flakydemo/flaky.spec.ts
+✓ recorded thumbs-up
+
+# 4. Suite is green; the test stays visible, not silently rotting
+$ npx playwright test tests/flakydemo   # → 1 skipped, 1 passed
+$ npm run agent -- steward --runs 2
+  9 tests × 2 runs — 8 healthy · 0 flaky · 0 always-failing · 1 skipped
+  ## Quarantined / skipped (1)
+  - `tests/flakydemo/flaky.spec.ts` › toggles between pass and fail
+```
+
+The verify step is real: the patched copy runs Playwright next to the
+original (so imports resolve) before the diff is ever offered — a broken
+neighbor test rejects the quarantine instead of applying it.

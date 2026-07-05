@@ -6,7 +6,7 @@ suite → get a health report that separates flaky from broken — then heal
 everything it flagged in one command, and rate the patches so the next heal
 is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 
-**Release:** `v0.8.0-steward-ci` · previous tags: `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
+**Release:** `v0.9.0-quarantine` · previous tags: `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
 ## What it does
 
@@ -19,6 +19,7 @@ is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 | **Steward** | `agent steward` | Suite health from K repeated runs: healthy / flaky / always-failing, with heal candidates and trend deltas |
 | **Batch** | `agent batch --from-steward <id>` | Every flagged spec healed under one parent manifest with a hard cost cap |
 | **Feedback** | `agent feedback <id> --down --note "…"` | Human verdicts stored per repo and injected into the next heal's prompt; `apply` records a 👍 automatically |
+| **Quarantine** | `agent quarantine --from-steward <id>` | Flaky tests wrapped in `test.fixme` (dry-run diff, verified, applied via `apply`) and kept visible in the steward report |
 
 Everything is dry-run by default; `agent apply` is the only thing that touches
 your files. Every LLM call is metered (`agent cost`), every step is an event
@@ -144,7 +145,7 @@ infra/future/          Terraform for the cloud v1 target — parked
 |---------|--------------|
 | `npm run dev:up` | Start Postgres, apply migrations, seed dev tenant |
 | `npm run dev` | API (:3001) + worker with tsx watch |
-| `npm run agent` | The CLI (`add`, `heal`, `improve`, `steward`, `batch`, `apply`, `feedback`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
+| `npm run agent` | The CLI (`add`, `heal`, `improve`, `steward`, `batch`, `apply`, `quarantine`, `feedback`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
 | `npm run typecheck` / `npm run build` | Typecheck / compile every workspace |
 | `npm run test:rls` | Cross-tenant isolation tests |
 | `npm run test:playwright` | Run the Playwright suite |

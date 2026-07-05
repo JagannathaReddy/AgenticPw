@@ -14,12 +14,13 @@ import type { StewardManifestRow } from './workflows/steward.js';
 import { runSteward } from './workflows/steward.js';
 import type { BatchManifestRow } from './workflows/batch.js';
 import { runBatch } from './workflows/batch.js';
+import { runQuarantine, type QuarantineManifestRow } from './workflows/quarantine.js';
 
 const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
 interface ClaimedManifest {
   id: string;
-  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator';
+  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator' | 'quarantiner';
   org_id: string;
   workspace_id: string;
   goal: unknown;
@@ -32,7 +33,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
     const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator')
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator', 'quarantiner')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -126,6 +127,12 @@ async function main(): Promise<void> {
         });
       } else if (claim.role === 'steward') {
         result = await runSteward(claim as unknown as StewardManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else if (claim.role === 'quarantiner') {
+        result = await runQuarantine(claim as unknown as QuarantineManifestRow, {
           pool,
           artifacts,
           config,

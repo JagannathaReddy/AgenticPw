@@ -153,7 +153,7 @@ action.
 3. `suite-health.yml`: weekly + manual dispatch, secret-gated like
    heal-on-failure, uploads `steward-report.json` as an artifact.
 
-## Sprint 5 — auto-quarantine flaky tests (est. ~2 days) → `v0.9.0-quarantine`
+## Sprint 5 — auto-quarantine flaky tests (est. ~2 days) → `v0.9.0-quarantine` ✅ SHIPPED 2026-07-06
 
 Parked at v0.4.0 because "writing to specs crosses the trust-rung boundary;
 needs the #16 feedback loop first." #16 shipped — the blocker is gone, and

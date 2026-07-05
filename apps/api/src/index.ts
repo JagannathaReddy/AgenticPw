@@ -8,6 +8,7 @@ import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerHealsRoutes } from './routes/heals.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerImprovesRoutes } from './routes/improves.js';
+import { registerQuarantinesRoutes } from './routes/quarantines.js';
 import { registerReposRoutes } from './routes/repos.js';
 import { registerStewardsRoutes } from './routes/stewards.js';
 import { registerTestsRoutes } from './routes/tests.js';
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
   registerStewardsRoutes(app, db);
   registerBatchesRoutes(app, db);
   registerFeedbackRoutes(app, db);
+  registerQuarantinesRoutes(app, db);
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'Shutting down API');
