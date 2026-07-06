@@ -680,3 +680,43 @@ Trust rung 3 lives in CI: `open-pr: 'true'` on the heal action commits
 verified patches to a `test-agent/heal-*` branch and opens a PR — a human
 still merges. Rungs 4–5 (auto-merge, unattended) stay unbuilt on purpose:
 they encode organizational trust, not code.
+
+## Part 11 — Semantic few-shot retrieval (v0.12.0)
+
+New in v0.12.0: onboarding embeds your specs (text-embedding-3-small,
+metered — 9 files cost $0.000014) and the Generator's few-shot picker ranks
+by cosine similarity, falling back to keyword overlap whenever embeddings
+are absent. Observed A/B with the production picker:
+
+```
+GOAL: "user buys a product and receives an order confirmation"
+  keyword:  0.167 checkout-flow.spec.ts [order]     ← 1 lucky token
+            0.000 seed.spec.ts []                   ← zero-score filler
+            0.000 docs-navigation.spec.ts []        ← zero-score filler
+  semantic: 0.328 checkout-flow.spec.ts             ← clear margin
+            0.162 docs-navigation.spec.ts
+            0.157 playwright-home.spec.ts
+
+GOAL: "navigate to the setup documentation and verify the install instructions are shown"
+  keyword:  0.286 checkout-add-3-items.spec.ts [verify,install]  ← right file, token accident
+            0.143 docs-navigation.spec.ts  (tied with an irrelevant spec)
+  semantic: 0.436 checkout-add-3-items.spec.ts      ← right file, ranked by CONTENT
+            0.395 docs-navigation.spec.ts           ← close second, as it should be
+```
+
+The second goal is the interesting one: `checkout-add-3-items.spec.ts` is a
+misleadingly-named leftover whose *content* is a Get-Started/Installation
+test — semantic ranked it by what it does, not what it's called, and gave
+the honest runner-up a real score instead of a tie with noise.
+
+End-to-end: a coverage run's `rag-examples.json` artifact records
+`"method": "semantic"` with per-pick scores, so every generation's
+retrieval is auditable.
+
+**Honest A/B verdict (per the plan's own clause):** retrieval quality
+demonstrably improves — paraphrases retrieve, zero-score filler disappears,
+content beats filenames. End-generation *style* lift is unmeasurable on a
+9-spec repo where keyword usually stumbles into a usable example anyway;
+the ranker earns its keep on suites big enough that it can't. Semantic is
+on by default with silent keyword fallback (no key, no embeddings, over
+budget — all degrade gracefully).

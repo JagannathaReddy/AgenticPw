@@ -18,6 +18,7 @@ export interface GeneratorInput {
   expectedOutcomes: string[];
   exploration: ExplorerOutput;
   repoRoot: string;
+  repoId?: string | null;
   /**
    * Optional extracted profile (conventions JSON from repo_profiles). When
    * present the generator uses it as authoritative style guidance; otherwise
@@ -103,11 +104,38 @@ export async function runGenerator(
     throw new Error('Generator requires an LLM API key. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.');
   }
 
-  const examples = await pickFewShotExamples({
+  const { examples, method: pickMethod } = await pickFewShotExamples({
     repoRoot: input.repoRoot,
     goalText: input.goal,
     k: 3,
+    ...(input.repoId
+      ? {
+          semantic: {
+            pool,
+            tenant,
+            repoId: input.repoId,
+            meta: {
+              workspaceId: tenant.workspaceId,
+              manifestId: input.manifestId,
+              correlationId: input.correlationId,
+            },
+          },
+        }
+      : {}),
   });
+  // Audit trail for the retrieval A/B: which ranker ran, what it picked.
+  await artifacts.put(
+    `${input.manifestId}/rag-examples.json`,
+    JSON.stringify(
+      {
+        method: pickMethod,
+        goal: input.goal,
+        picks: examples.map((e) => ({ path: e.testPath, score: e.score, terms: e.matchedTerms })),
+      },
+      null,
+      2,
+    ),
+  );
   const rendered = renderExamples(examples);
 
   const prompt = await loadPrompt({
@@ -158,7 +186,7 @@ export async function runGenerator(
       `# cost: $${response.usage.costUSD.toFixed(6)}`,
       `# latency: ${response.usage.latencyMs}ms`,
       `# prompt: ${prompt.meta.id} · hash ${prompt.meta.hash.slice(0, 12)}`,
-      `# examples: ${examples.map((e) => e.testPath).join(', ') || '(none)'}`,
+      `# examples (${pickMethod}): ${examples.map((e) => e.testPath).join(', ') || '(none)'}`,
       `# profile: ${input.repoProfile ? 'extracted (authoritative)' : 'heuristic'}`,
       '',
       response.content,

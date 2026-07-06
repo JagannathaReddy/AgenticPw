@@ -132,6 +132,7 @@ export async function runCoverage(
       exploration,
       repoRoot: repoContext.repoRoot,
       repoProfile: repoContext.repoProfile,
+      repoId,
     },
     deps.artifacts,
     deps.config,

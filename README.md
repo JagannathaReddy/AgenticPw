@@ -6,14 +6,14 @@ suite → get a health report that separates flaky from broken — then heal
 everything it flagged in one command, and rate the patches so the next heal
 is smarter. It runs on a laptop and, since v0.7.0, in your CI.
 
-**Release:** `v0.11.0-trust` · previous tags: `v0.10.0-eval-loop` · `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
+**Release:** `v0.12.0-semantic-rag` · previous tags: `v0.11.0-trust` · `v0.10.0-eval-loop` · `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
 ## What it does
 
 | Flow | Command | What you get |
 |------|---------|--------------|
 | **Coverage** | `agent add "<goal>" --url …` | A real Playwright spec + page object in your repo's conventions, verified green before it ships |
-| **Onboarding** | `agent init . --name my-repo` | A `RepoProfile` of your conventions (locator style, POM layout, naming) that every other flow consumes |
+| **Onboarding** | `agent init . --name my-repo` | A `RepoProfile` of your conventions that every other flow consumes — plus pgvector embeddings of your specs for semantic few-shot retrieval |
 | **Triage** | `agent heal tests/foo.spec.ts` | A dry-run diff that fixes `locator_drift`/`timing` failures — or a refusal (`product_bug`, `out_of_scope`, …) when a patch would hide a real bug |
 | **Improve** | `agent improve tests/rough.spec.ts` | A rough `codegen` draft polished into your conventions |
 | **Steward** | `agent steward` | Suite health from K repeated runs: healthy / flaky / always-failing, with heal candidates and trend deltas |
@@ -183,4 +183,3 @@ The [docs index](docs/README.md) maps everything. Shortcuts:
 - GitHub App PR flow, WorkOS SSO, Temporal, sandboxed browser pool — the
   cloud v1 target, scoped in [the design doc](docs/design/Q1-TECHNICAL-DESIGN.md)
   and parked in [infra/future/](infra/future/)
-- pgvector semantic retrieval (installed, unused until generation quality needs it)

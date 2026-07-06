@@ -249,7 +249,7 @@ worker consults — refuseCategories (today: scattered), per-manifest
 maxCostUSD enforced in the LLM shim (today: only batch aggregates spend),
 trustRung gating the apply behavior. Pure + unit-tested.
 
-## Sprint 8 — semantic RAG on pgvector (est. ~2 days) → `v0.12.0-semantic-rag`
+## Sprint 8 — semantic RAG on pgvector (est. ~2 days) → `v0.12.0-semantic-rag` ✅ SHIPPED 2026-07-07 (items 1, 2, 4; item 3 — semantic feedback retrieval — stays gated on a repo reaching >20 feedback rows, as planned)
 
 Q2's "vector semantic recall", buildable and *provable* without waiting for
 a trial: the eval harness is the judge.

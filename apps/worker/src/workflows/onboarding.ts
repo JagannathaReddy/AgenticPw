@@ -5,6 +5,7 @@ import type { WorkerConfig } from '../config.js';
 import { runOnboarding } from '../activities/onboarding.js';
 import { withTenant, type Tenant } from '../db.js';
 import { manifestLogger } from '../logger.js';
+import { embedRepoSpecs } from '../activities/embed-specs.js';
 import {
   appendEvent,
   startManifest,
@@ -124,11 +125,38 @@ export async function runOnboardingWorkflow(
     });
   });
 
+  // Sprint 8: embed spec files for semantic RAG. Best-effort — the keyword
+  // picker is always there, so embeddings never fail an onboarding.
+  let embeddings: { files: number; embedded: number; unchanged: number } | null = null;
+  try {
+    embeddings = await embedRepoSpecs(
+      localPath,
+      repoId,
+      {
+        workspaceId: manifest.workspace_id,
+        manifestId: manifest.id,
+        correlationId: manifest.audit.correlationId,
+      },
+      deps.pool,
+      tenant,
+    );
+    await withTenant(deps.pool, tenant, async (client) => {
+      await appendEvent(client, manifest, 'progress', null, null, {
+        stage: 'embeddings_done',
+        ...embeddings,
+      });
+    });
+    log.info({ stage: 'embeddings_done', ...embeddings }, 'Spec embeddings ready');
+  } catch (err) {
+    log.warn({ stage: 'embeddings', err: (err as Error).message }, 'Embeddings skipped');
+  }
+
   return terminate(deps.pool, tenant, manifest, 'succeeded', {
     profileId,
     confidence: extraction.confidence,
     filesSampled: extraction.filesSampled,
     fixturesSampled: extraction.fixturesSampled,
+    embeddings,
   });
 }
 

@@ -292,3 +292,81 @@ export async function complete(
     usage,
   };
 }
+
+// ── Embeddings (Sprint 8: semantic RAG) ────────────────────────────────────
+
+const EMBEDDING_MODEL = 'text-embedding-3-small'; // 1536 dims — matches vector(1536)
+const EMBEDDING_COST_PER_1M = 0.02;
+
+export class EmbeddingsUnavailableError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'EmbeddingsUnavailableError';
+  }
+}
+
+export interface EmbedMeta {
+  workspaceId: string;
+  manifestId: string;
+  correlationId: string;
+}
+
+/**
+ * Embed texts with OpenAI (Anthropic has no embeddings API). Metered into
+ * llm_calls (task_class 'embed') and subject to the same per-manifest
+ * budget gate as completions. Callers treat EmbeddingsUnavailableError as
+ * "fall back to the keyword path", never as fatal.
+ */
+export async function embed(
+  texts: string[],
+  meta: EmbedMeta,
+  pool: pg.Pool,
+  tenant: Tenant,
+): Promise<number[][]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new EmbeddingsUnavailableError('OPENAI_API_KEY not set — embeddings need OpenAI');
+  }
+  if (texts.length === 0) return [];
+
+  const request: LLMCompleteRequest = {
+    workspaceId: meta.workspaceId,
+    manifestId: meta.manifestId,
+    correlationId: meta.correlationId,
+    taskClass: 'embed',
+    messages: [],
+    promptRef: { file: 'embedding', hash: EMBEDDING_MODEL },
+  };
+  await enforceBudget(request, pool, tenant);
+
+  const started = Date.now();
+  const res = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: EMBEDDING_MODEL, input: texts }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new EmbeddingsUnavailableError(`OpenAI embeddings ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const body = (await res.json()) as {
+    data: Array<{ index: number; embedding: number[] }>;
+    usage?: { prompt_tokens?: number };
+  };
+  const tokens = body.usage?.prompt_tokens ?? 0;
+  const costUSD = (tokens * EMBEDDING_COST_PER_1M) / 1_000_000;
+  await persistCall(
+    pool,
+    tenant,
+    request,
+    'openai',
+    EMBEDDING_MODEL,
+    tokens,
+    0,
+    costUSD,
+    Date.now() - started,
+    'ok',
+    null,
+  );
+  return body.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
+}

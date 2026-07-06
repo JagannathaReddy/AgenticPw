@@ -4,7 +4,7 @@
 
 export type LLMProvider = 'anthropic' | 'openai' | 'google';
 
-export type TaskClass = 'plan' | 'generate' | 'classify' | 'verify';
+export type TaskClass = 'plan' | 'generate' | 'classify' | 'verify' | 'embed';
 
 export interface PromptRef {
   file: string;
