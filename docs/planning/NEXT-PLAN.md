@@ -267,7 +267,7 @@ a trial: the eval harness is the judge.
    slice shows no lift on this repo, we say so in the report and gate the
    default on a bigger-suite trial.
 
-## Sprint 9 — webhook notifications (est. ~½ day) → `v0.13.0-notify`
+## Sprint 9 — webhook notifications (est. ~½ day) → `v0.13.0-notify` ⏸ PARKED 2026-07-07 by explicit call
 
 The Slack-App intent at laptop scale: `NOTIFY_WEBHOOK_URL` env (Slack
 incoming-webhook compatible). Worker posts terminal summaries — steward
@@ -290,3 +290,10 @@ between what `manifest.policy` *records* and what the system *enforces*;
 Sprint 8 carries its own proof via the eval harness; Sprint 9 is a
 quality-of-life capstone. The developer trial remains the standing
 validation item and can land anywhere in this sequence.
+
+**Outcome:** Sprints 7 and 8 shipped (v0.11.0, v0.12.0). Sprint 9 parked —
+nobody is asking for notifications yet, and CI job summaries + PR comments
+already cover the "tell me what happened" need at current scale. Unpark
+when a steward/heal run happens that a human *missed* and wishes they
+hadn't. With that, the Q2-remaining plan is closed: everything is either
+shipped or parked with a written trigger.
