@@ -146,9 +146,11 @@ export function registerFeedbackRoutes(app: FastifyInstance, db: Db): void {
           LIMIT 20`,
       );
       const recent = await client.query(
-        `SELECT manifest_id, verdict, source, category, test_path, note, created_at
-           FROM heal_feedback
-          ORDER BY created_at DESC
+        `SELECT hf.manifest_id, hf.verdict, hf.source, hf.category, hf.test_path,
+                hf.note, hf.created_at, m.role
+           FROM heal_feedback hf
+           LEFT JOIN manifests m ON m.id = hf.manifest_id
+          ORDER BY hf.created_at DESC
           LIMIT 10`,
       );
       return {

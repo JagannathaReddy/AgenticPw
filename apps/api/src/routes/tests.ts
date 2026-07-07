@@ -166,6 +166,8 @@ export function registerTestsRoutes(app: FastifyInstance, db: Db): void {
   });
 
   app.get('/v1/tests', async (request) => {
+    const requested = Number((request.query as { limit?: string }).limit);
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 500) : 100;
     return withTenant(db, request.tenant, async (client) => {
       const { rows } = await client.query(
         `SELECT m.id, m.role, m.status, m.goal,
@@ -192,7 +194,8 @@ export function registerTestsRoutes(app: FastifyInstance, db: Db): void {
              SELECT verdict, note FROM heal_feedback WHERE manifest_id = m.id
               ORDER BY (source = 'explicit') DESC, created_at DESC LIMIT 1
            ) fb ON true
-          ORDER BY m.created_at DESC LIMIT 100`,
+          ORDER BY m.created_at DESC LIMIT $1`,
+        [limit],
       );
       return rows;
     });

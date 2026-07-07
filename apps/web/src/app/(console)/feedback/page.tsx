@@ -4,6 +4,7 @@ import { useConsoleStore } from "@/store/useConsoleStore";
 import { buildRows, buildFeedbackRows } from "@/lib/selectors";
 import { shortId, relTime } from "@/lib/format";
 import { FLOW_META } from "@/lib/meta";
+import { roleToFlow } from "@/lib/mapManifest";
 
 export default function FeedbackPage() {
   const manifests = useConsoleStore((s) => s.manifests);
@@ -35,7 +36,7 @@ export default function FeedbackPage() {
       <div className="bg-white border border-[#E4E6EB] rounded-xl overflow-hidden">
         <div className="py-3.5 px-5 border-b border-[#EEF0F2] text-[13.5px] font-bold">Notes gallery</div>
         {recent.map((r) => {
-          const fm = FLOW_META.heal;
+          const fm = FLOW_META[roleToFlow(r.role ?? "triage")];
           return (
             <div key={r.manifest_id + r.created_at} className="flex gap-3.5 py-3.5 px-5 border-b border-[#F5F6F8] last:border-0">
               <span className="text-[18px]">{r.verdict === "up" ? "👍" : "👎"}</span>
@@ -46,7 +47,7 @@ export default function FeedbackPage() {
                     className="text-[11px] font-bold py-0.5 px-2 rounded-md"
                     style={{ color: fm.fg, background: fm.bg }}
                   >
-                    Heal
+                    {fm.label}
                   </span>
                   <span className="text-[12px] text-[#9CA3AF]">
                     {r.category ?? "—"} · {r.test_path ?? "—"}

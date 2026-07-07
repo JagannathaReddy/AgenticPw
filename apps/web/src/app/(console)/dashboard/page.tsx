@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useConsoleStore } from "@/store/useConsoleStore";
-import { buildRows, buildRepoRows, buildStewardReportRows, dashboardSummary, recentRows, stewardReportsFromManifests } from "@/lib/selectors";
+import { buildRows, buildRepoRows, dashboardSummary, recentRows, stewardReportsFromManifests } from "@/lib/selectors";
 import { ACCENT_COLOR } from "@/lib/meta";
 
 export default function DashboardPage() {

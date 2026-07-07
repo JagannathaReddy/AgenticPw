@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useManifestDetail } from '@/hooks/useManifestDetail';
 import { useManifestEvents } from '@/hooks/useManifestEvents';
 import { mapManifestEvents, dotColor, type ApiManifestEvent } from '@/lib/manifestEvents';

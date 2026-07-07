@@ -25,7 +25,7 @@ export interface ApiManifestRow {
   repoId?: string | null;
 }
 
-function roleToFlow(role: string, goalKind?: string): Flow {
+export function roleToFlow(role: string, goalKind?: string): Flow {
   if (role === 'orchestrator' || goalKind === 'batch_heal') return 'batch';
   switch (role) {
     case 'coverage':

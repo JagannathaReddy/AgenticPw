@@ -14,15 +14,33 @@ export default function StewardReportTab({ manifest }: { manifest: ManifestRow }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Reset during render when the target changes — the effect below must not
+  // call setState synchronously (react-hooks/set-state-in-effect).
+  const [prevId, setPrevId] = useState(manifest.id);
+  if (manifest.id !== prevId) {
+    setPrevId(manifest.id);
+    setData(null);
     setLoading(true);
+    setError(null);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
     void apiFetch<StewardReportPayload>(`/v1/tests/${manifest.id}/steward-report`)
       .then((d) => {
+        if (cancelled) return;
         setData(d);
         setError(null);
       })
-      .catch((err) => setError((err as Error).message))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError((err as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [manifest.id]);
 
   if (loading) {

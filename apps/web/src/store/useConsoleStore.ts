@@ -112,7 +112,7 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
 
   refreshManifests: async () => {
     try {
-      const rows = await apiFetch<ApiManifestRow[]>('/v1/tests');
+      const rows = await apiFetch<ApiManifestRow[]>('/v1/tests?limit=500');
       set({ manifests: mapApiManifests(rows), apiReady: true, apiError: null });
     } catch (err) {
       set({ apiError: (err as Error).message });

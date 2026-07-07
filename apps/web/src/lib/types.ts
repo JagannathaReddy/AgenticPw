@@ -197,6 +197,7 @@ export interface StewardReportPayload {
 export interface FeedbackNoteRow {
   manifest_id: string;
   verdict: 'up' | 'down';
+  role: string | null;
   category: string | null;
   test_path: string | null;
   note: string | null;

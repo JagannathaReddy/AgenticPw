@@ -28,22 +28,32 @@ export default function StewardPage() {
   const repoRuns = sel ? stewardRunsForRepo(manifests, sel) : [];
   const activeManifestId = selectedManifestId ?? repoRuns[0]?.manifestId ?? selected?.manifestId;
 
-  useEffect(() => {
-    if (!activeManifestId) {
-      setReportData(null);
-      setReportError(null);
-      return;
-    }
+  // Reset during render when the target changes — the effect below must not
+  // call setState synchronously (react-hooks/set-state-in-effect).
+  const [prevManifestId, setPrevManifestId] = useState(activeManifestId);
+  if (activeManifestId !== prevManifestId) {
+    setPrevManifestId(activeManifestId);
+    setReportData(null);
     setReportError(null);
+  }
+
+  useEffect(() => {
+    if (!activeManifestId) return;
+    let cancelled = false;
     void apiFetch<StewardReportPayload>(`/v1/tests/${activeManifestId}/steward-report`)
       .then((data) => {
+        if (cancelled) return;
         setReportData(data);
         setReportError(null);
       })
       .catch((err) => {
+        if (cancelled) return;
         setReportData(null);
         setReportError((err as Error).message);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [activeManifestId]);
 
   if (!sel) {

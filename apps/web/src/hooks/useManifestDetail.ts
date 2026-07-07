@@ -21,9 +21,18 @@ export function useManifestDetail(manifestId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset during render when the target changes — the effect below must not
+  // call setState synchronously (react-hooks/set-state-in-effect).
+  const [prevId, setPrevId] = useState(manifestId);
+  if (manifestId !== prevId) {
+    setPrevId(manifestId);
+    setDetail(null);
+    setLoading(true);
+    setError(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     void apiFetch<ManifestDetail>(`/v1/tests/${manifestId}`)
       .then((d) => {
         if (!cancelled) {

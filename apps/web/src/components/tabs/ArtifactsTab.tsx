@@ -25,13 +25,18 @@ export default function ArtifactsTab({ manifestId }: { manifestId: string }) {
 
   useEffect(() => {
     const name = files[selected]?.name;
-    if (!name) {
-      setContent("");
-      return;
-    }
+    if (!name) return;
+    let cancelled = false;
     void apiFetchText(`/v1/tests/${manifestId}/artifacts/file?name=${encodeURIComponent(name)}`)
-      .then(setContent)
-      .catch(() => setContent("[unable to load artifact]"));
+      .then((text) => {
+        if (!cancelled) setContent(text);
+      })
+      .catch(() => {
+        if (!cancelled) setContent("[unable to load artifact]");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [manifestId, files, selected]);
 
   return (
@@ -56,7 +61,7 @@ export default function ArtifactsTab({ manifestId }: { manifestId: string }) {
         ))}
       </div>
       <div className="flex-1 bg-white border border-[#E4E6EB] rounded-xl py-4 px-4.5">
-        <div className="font-mono text-[12px] text-[#4B5563] whitespace-pre-wrap">{content}</div>
+        <div className="font-mono text-[12px] text-[#4B5563] whitespace-pre-wrap">{files[selected] ? content : ""}</div>
       </div>
     </div>
   );

@@ -6,16 +6,24 @@ import type { ApiManifestEvent } from '@/lib/manifestEvents';
 /** Subscribe to live manifest events via SSE (`/v1/tests/:id/events`). */
 export function useManifestEvents(manifestId: string, enabled: boolean) {
   const [events, setEvents] = useState<ApiManifestEvent[]>([]);
-  const [live, setLive] = useState(false);
+  const [live, setLive] = useState(enabled);
   const [terminal, setTerminal] = useState<string | null>(null);
   const seenIds = useRef(new Set<number>());
 
-  useEffect(() => {
-    if (!enabled) return;
+  // Reset during render when the subscription target changes — the effect
+  // below must not call setState synchronously (react-hooks/set-state-in-effect).
+  const key = `${manifestId}:${enabled}`;
+  const [prevKey, setPrevKey] = useState(key);
+  if (key !== prevKey) {
+    setPrevKey(key);
     setEvents([]);
     setTerminal(null);
+    setLive(enabled);
+  }
+
+  useEffect(() => {
+    if (!enabled) return;
     seenIds.current.clear();
-    setLive(true);
 
     const es = new EventSource(`/v1/tests/${manifestId}/events`);
 
