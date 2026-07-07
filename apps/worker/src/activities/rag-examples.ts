@@ -54,7 +54,7 @@ export async function walkSpecs(dir: string): Promise<string[]> {
       if (entry.isDirectory()) {
         if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
         await recurse(full);
-      } else if (/\.spec\.[tj]sx?$/.test(entry.name)) {
+      } else if (/\.(spec|test)\.[tj]sx?$/.test(entry.name)) {
         out.push(full);
       }
     }

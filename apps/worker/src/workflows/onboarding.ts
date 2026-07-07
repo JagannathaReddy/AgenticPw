@@ -129,6 +129,9 @@ export async function runOnboardingWorkflow(
   // picker is always there, so embeddings never fail an onboarding.
   let embeddings: { files: number; embedded: number; unchanged: number } | null = null;
   try {
+    const testDir = (
+      extraction.profile as { playwright?: { test_dir?: string } }
+    ).playwright?.test_dir?.replace(/\/$/, '') ?? 'tests';
     embeddings = await embedRepoSpecs(
       localPath,
       repoId,
@@ -139,6 +142,7 @@ export async function runOnboardingWorkflow(
       },
       deps.pool,
       tenant,
+      testDir,
     );
     await withTenant(deps.pool, tenant, async (client) => {
       await appendEvent(client, manifest, 'progress', null, null, {

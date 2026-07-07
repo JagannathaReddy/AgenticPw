@@ -30,8 +30,9 @@ export async function embedRepoSpecs(
   meta: EmbedMeta,
   pool: pg.Pool,
   tenant: Tenant,
+  testDir = 'tests',
 ): Promise<EmbedSpecsResult> {
-  const testsDir = path.join(repoRoot, 'tests');
+  const testsDir = path.join(repoRoot, testDir);
   const specs = (await walkSpecs(testsDir)).slice(0, MAX_FILES);
 
   const existing = await withTenant(pool, tenant, async (client) => {
