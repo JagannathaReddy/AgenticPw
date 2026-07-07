@@ -153,6 +153,7 @@ export async function runGenerator(
       example_page_object_3: rendered.page3,
       observed_actions: input.exploration.actions.map((a) => `- ${a.summary}`).join('\n'),
       aria_snapshot_final: input.exploration.ariaSnapshotSummary,
+      observed_final_url: input.exploration.finalUrl || '(unknown)',
     },
   });
 

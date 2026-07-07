@@ -86,3 +86,15 @@ test('rejects empty content', () => {
 test('rejects fewer than 2 markers', () => {
   assert.throws(() => parseGeneratorOutput('===FILE: tests/foo.spec.ts===\nlone'), /at least 2/);
 });
+
+test('rejects hallucinated matchers (toMatchThemeScreenshots)', () => {
+  const raw = `===FILE: tests/pages/foo.page.ts===
+export class FooPage {}
+===FILE: tests/foo.spec.ts===
+import { test, expect } from '@playwright/test';
+test('foo', async ({ page }) => {
+  await expect(page).toMatchThemeScreenshots();
+});
+===END===`;
+  assert.throws(() => parseGeneratorOutput(raw), /toMatchThemeScreenshots/);
+});

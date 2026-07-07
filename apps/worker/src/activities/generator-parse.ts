@@ -41,6 +41,18 @@ export class GeneratorParseError extends Error {
 const FILE_MARKER = /===\s*FILE\s*:\s*([^=\n\r]+?)\s*===\s*\r?\n/g;
 const END_MARKER = /===\s*END\s*===\s*/;
 
+/**
+ * Matchers the model has been observed to hallucinate in real runs. None of
+ * these exist in Playwright; catching them at parse time saves a 30–60s
+ * Playwright round-trip and gives the user a clearer refusal category than
+ * "test failed at runtime". Extend as new hallucinations show up.
+ */
+const HALLUCINATED_MATCHERS = [
+  'toMatchThemeScreenshots',
+  'toMatchImageSnapshot',
+  'toMatchInlineSnapshot',
+];
+
 function stripFences(content: string): string {
   return content
     .replace(/^\s*```(?:typescript|ts|tsx|javascript|js)?\s*\r?\n/i, '')
@@ -96,6 +108,15 @@ export function parseGeneratorOutput(raw: string): GeneratorParseResult {
 
   if (!test) throw new GeneratorParseError('No spec file found in output', raw);
   if (!pageObject) throw new GeneratorParseError('No page object file found in output', raw);
+
+  for (const matcher of HALLUCINATED_MATCHERS) {
+    if (test.content.includes('.' + matcher + '(') || pageObject.content.includes('.' + matcher + '(')) {
+      throw new GeneratorParseError(
+        `Hallucinated matcher: .${matcher}() is not a Playwright API`,
+        raw,
+      );
+    }
+  }
 
   return { test, pageObject };
 }

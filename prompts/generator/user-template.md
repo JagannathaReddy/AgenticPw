@@ -17,6 +17,7 @@ Variables:
 - `{{example_page_object_1}}`, etc. — matching page objects
 - `{{observed_actions}}` — bulleted action trace from the Explorer
 - `{{aria_snapshot_final}}` — a11y tree at the final verified state
+- `{{observed_final_url}}` — the URL the browser landed on after the last action
 
 ---
 
@@ -92,6 +93,12 @@ The Explorer completed the goal successfully with these steps. Replay them in th
 {{observed_actions}}
 ```
 
+## Final observed URL
+
+**{{observed_final_url}}**
+
+Any `toHaveURL` / URL-based assertion in your generated test MUST use this exact URL (or a substring or regex derived from it). Do not invent URL paths from the goal text or from what you remember about the site — use only what was observed.
+
 ## Final page state (a11y tree, for locator selection)
 
 ```yaml
@@ -100,4 +107,4 @@ The Explorer completed the goal successfully with these steps. Replay them in th
 
 ---
 
-Emit the two files as specified in the system prompt. No commentary.
+Emit the two files as specified in the system prompt. No commentary. Only use matchers documented in Playwright (`toBeVisible`, `toHaveText`, `toHaveURL`, `toHaveTitle`, `toHaveCount`, `toBeEnabled`, `toBeChecked`, `toContainText`, `toHaveAttribute`, `toHaveValue`, `toHaveScreenshot`). Do not invent matchers.

@@ -26,6 +26,11 @@ export interface ExplorerOutput {
   ariaSnapshotPath: string;
   ariaSnapshotSummary: string;
   verifyResult: VerifyResult;
+  /** The last URL the browser observed after all actions completed. Empty
+   * string when no action reported a URL. The Generator prompt feeds this
+   * in as `observed_final_url` so URL assertions use ground truth instead
+   * of the model's guess. */
+  finalUrl: string;
   reason?: string;
 }
 
@@ -166,6 +171,29 @@ export async function runExplorer(
       return { type, summary: String(summary).slice(0, 500), raw: a };
     });
 
+    // Extract the last observed URL. Prefer the most recent non-wait action
+    // (waits often carry the URL from *before* a redirect resolved).
+    let finalUrl = '';
+    for (let i = (result.actions ?? []).length - 1; i >= 0; i--) {
+      const rec = (result.actions ?? [])[i] as Record<string, unknown>;
+      if (rec.type === 'wait') continue;
+      if (typeof rec.pageUrl === 'string' && rec.pageUrl) {
+        finalUrl = rec.pageUrl;
+        break;
+      }
+    }
+    if (!finalUrl) {
+      // Fall back to the last URL of any kind (including waits) — better than
+      // nothing when every recorded action is a wait.
+      for (let i = (result.actions ?? []).length - 1; i >= 0; i--) {
+        const rec = (result.actions ?? [])[i] as Record<string, unknown>;
+        if (typeof rec.pageUrl === 'string' && rec.pageUrl) {
+          finalUrl = rec.pageUrl;
+          break;
+        }
+      }
+    }
+
     const verifyResult = verifyOutcomes(rawSnapshot, input.expectedOutcomes);
 
     // MVP: trust the agent's success signal. The a11y verifier is recorded
@@ -183,6 +211,7 @@ export async function runExplorer(
       ariaSnapshotPath,
       ariaSnapshotSummary: truncatedSnapshot,
       verifyResult,
+      finalUrl,
       reason: verified
         ? undefined
         : buildReason(agentSuccess, result.message ?? '', verifyResult),
