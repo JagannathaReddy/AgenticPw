@@ -22,8 +22,8 @@ jobs:
       - run: npm ci
       - name: Typecheck ops-types
         run: npx tsc -p packages/ops-types/tsconfig.json --noEmit
-      - name: Typecheck ops-prompts
-        run: npx tsc -p packages/ops-prompts/tsconfig.json --noEmit
+      - name: Build shared packages
+        run: npm run build -w @poc/types && npm run build -w @poc/prompts
       - name: Typecheck rls-tests
         run: npx tsc -p packages/rls-tests/tsconfig.json --noEmit
       - name: Typecheck eval-harness
@@ -43,6 +43,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Build shared packages
+        run: npm run build -w @poc/types && npm run build -w @poc/prompts
       - name: Compile apps/worker
         run: npx tsc -p apps/worker/tsconfig.json
       - name: verify-outcomes tests
@@ -67,12 +69,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Validate every prompt front-matter
-        run: |
-          npx tsx -e "import('@poc/prompts').then(async m => {
-            const metas = await m.validateAllPrompts();
-            console.log('✓', metas.length, 'prompts valid');
-            for (const meta of metas) console.log('  •', meta.id, '(' + meta.taskClass + ')');
-          })"
+        run: npm run prompts:validate
 
   rls-tests:
     name: RLS isolation suite

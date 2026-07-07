@@ -22,7 +22,7 @@
     "test:rls": "npm run test -w @poc/rls-tests",
     "test:playwright": "playwright test",
     "eval": "npm run eval -w @poc/eval-harness",
-    "prompts:validate": "tsx -e \"import('@poc/prompts').then(m => m.validateAllPrompts().then(ms => console.log('✓', ms.length, 'prompts valid')))\""
+    "prompts:validate": "tsx scripts/validate-prompts.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

@@ -49,6 +49,10 @@ function resolveApiKey(provider: LLMProvider): string {
       return process.env.OPENAI_API_KEY ?? '';
     case 'google':
       return process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
+    default: {
+      const _exhaustive: never = provider;
+      throw new Error(`Unsupported LLM provider: ${_exhaustive}`);
+    }
   }
 }
 
