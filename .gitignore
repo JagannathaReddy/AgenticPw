@@ -3,7 +3,7 @@ dist/
 
 # Local artifacts + reports (never commit)
 local-artifacts/
-tests/autonomous/
+**/tests/autonomous/
 tests/triaged/
 tests/improved/
 .eval-report.json

@@ -15,6 +15,7 @@ import {
   type TrendDeltas,
 } from '../activities/flake-analyzer.js';
 import { runPlaywrightSuite } from '../activities/suite-runner.js';
+import { playwrightInstallHint } from '../playwright-spawn.js';
 import { withTenant, type Tenant } from '../db.js';
 import { loadRepoContext } from '../repo-context.js';
 import { complete } from '../llm.js';
@@ -81,6 +82,14 @@ export async function runSteward(
     });
   log.info({ stage: 'started', repoRoot: repo.repoRoot, runs }, 'Steward started');
 
+  const installHint = await playwrightInstallHint(repo.repoRoot);
+  if (installHint) {
+    return terminate(deps.pool, tenant, manifest, 'rejected', {
+      category: 'no_results',
+      reason: installHint,
+    });
+  }
+
   // ── 1+2. Run the suite K times, persisting as we go ────────────────────
   const batches: RunBatch[] = [];
   let totalDurationMs = 0;
@@ -92,11 +101,15 @@ export async function runSteward(
     totalDurationMs += outcome.durationMs;
 
     if (outcome.results.length === 0) {
-      // Suite produced nothing parseable — config error, no tests, or the
-      // runner crashed. One empty run means every later run would be too.
+      const detail =
+        outcome.setupErrors[0] ??
+        outcome.outputTail.slice(-600);
+      const prefix = outcome.setupErrors.length
+        ? `Suite run ${runIndex} failed before tests ran`
+        : `Suite run ${runIndex} produced no test results (exit ${outcome.exitCode})`;
       return terminate(deps.pool, tenant, manifest, 'rejected', {
         category: 'no_results',
-        reason: `Suite run ${runIndex} produced no test results (exit ${outcome.exitCode}). Tail: ${outcome.outputTail.slice(-400)}`,
+        reason: `${prefix}: ${detail}`,
       });
     }
 

@@ -1,4 +1,9 @@
 import { spawn } from 'node:child_process';
+import {
+  playwrightInstallHint,
+  resolvePlaywrightCommand,
+  resolvePlaywrightProject,
+} from '../playwright-spawn.js';
 
 /**
  * Spawn `npx playwright test <testRelPath>` from the repo root and capture
@@ -93,39 +98,33 @@ export async function runPlaywright(
   timeoutMs: number,
   options: RunPlaywrightOptions = {},
 ): Promise<PlaywrightRunResult> {
+  const installHint = await playwrightInstallHint(repoRoot);
+  if (installHint) {
+    return {
+      exitCode: 1,
+      timedOut: false,
+      durationMs: 0,
+      json: null,
+      stdout: '',
+      stderr: installHint,
+      output: installHint,
+    };
+  }
+
+  const pw = await resolvePlaywrightCommand(repoRoot, 'run');
+  const project = resolvePlaywrightProject(options.project);
+
   return new Promise((resolve) => {
     const started = Date.now();
-    const args = [
-      'playwright',
-      'test',
-      testRelPath,
-      '--reporter=json',
-      '--trace=on',
-      '--workers=1',
-    ];
-
-    // Resolve the project. Priority:
-    //   1. options.project (caller supplied)
-    //   2. PLAYWRIGHT_PROJECT env var
-    //   3. undefined → no --project flag → let Playwright default
-    //
-    // Passing an empty string in options.project explicitly opts out of the
-    // env fallback, matching what a repo with only one project or a chain
-    // of `dependencies` needs.
-    const project =
-      options.project === null || options.project === ''
-        ? undefined
-        : options.project ?? process.env.PLAYWRIGHT_PROJECT ?? undefined;
+    const args = [...pw.prefixArgs, testRelPath, '--reporter=json', '--trace=on', '--workers=1'];
     if (project) args.push(`--project=${project}`);
 
     const env: NodeJS.ProcessEnv = { ...process.env, CI: '1' };
-    // Playwright inherits stdio and may pick up unrelated dotenv contents on
-    // some hosts; keep the base URL knob explicit so the run is deterministic.
 
-    const proc = spawn('npx', args, {
+    const proc = spawn(pw.command, args, {
       cwd: repoRoot,
       env,
-      shell: process.platform === 'win32',
+      shell: pw.shell,
     });
 
     let stdout = '';

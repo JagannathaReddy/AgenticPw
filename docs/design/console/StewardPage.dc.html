@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="display:flex; gap:16px; max-width:1180px; align-items:flex-start;">
+  <div style="width:260px; flex:none; background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:8px;">
+    <sc-for list="{{ reports }}" as="r" hint-placeholder-count="3">
+      <div onClick="{{ r.onClick }}" style="{{ r.itemStyle }}">
+        <div style="font-size:13.5px; font-weight:700;">{{ r.repo }}</div>
+        <div style="font-size:11.5px; color:#9CA3AF; margin-top:2px;">{{ r.dateLabel }} · {{ r.healthPct }}% healthy</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="flex:1; display:flex; flex-direction:column; gap:16px;">
+    <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:20px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="font-size:15px; font-weight:700;">{{ selected.repo }}</div>
+        <div style="font-size:12px; color:#9CA3AF;">report from {{ selected.dateLabel }}</div>
+      </div>
+      <div style="display:flex; gap:24px; margin-top:16px;">
+        <div><div style="font-size:11px; color:#9CA3AF; font-weight:700;">HEALTHY</div><div style="font-size:20px; font-weight:700; color:#16A34A;">{{ selected.healthy }}</div></div>
+        <div><div style="font-size:11px; color:#9CA3AF; font-weight:700;">FLAKY</div><div style="font-size:20px; font-weight:700; color:#D97706;">{{ selected.flaky }}</div></div>
+        <div><div style="font-size:11px; color:#9CA3AF; font-weight:700;">BROKEN</div><div style="font-size:20px; font-weight:700; color:#DC2626;">{{ selected.broken }}</div></div>
+      </div>
+      <div style="height:10px; border-radius:99px; background:#EEF0F2; margin-top:16px; overflow:hidden; display:flex;">
+        <div style="height:100%; background:#16A34A; width:{{ selected.healthyPct }};"></div>
+        <div style="height:100%; background:#D97706; width:{{ selected.flakyPct }};"></div>
+        <div style="height:100%; background:#DC2626; width:{{ selected.brokenPct }};"></div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:20px;">
+      <div style="font-size:12.5px; font-weight:700; color:#6B7280; text-transform:uppercase; margin-bottom:12px;">Since last report</div>
+      <div style="display:flex; gap:24px;">
+        <div style="font-size:13px;"><span style="font-weight:700; color:#DC2626;">{{ selected.delta.newFailures }}</span> new failures</div>
+        <div style="font-size:13px;"><span style="font-weight:700; color:#16A34A;">{{ selected.delta.fixed }}</span> fixed</div>
+        <div style="font-size:13px;"><span style="font-weight:700; color:#D97706;">{{ selected.delta.stillBroken }}</span> still broken</div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:20px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-size:13.5px; font-weight:700;">{{ selected.healCandidates }} heal candidates found</div>
+        <div style="font-size:12px; color:#9CA3AF; margin-top:2px;">Consistently failing specs across {{ selected.repo }}</div>
+      </div>
+      <div style="font-size:13px; font-weight:700; color:#fff; background:{{ accentColor }}; padding:9px 16px; border-radius:8px; cursor:pointer;">Batch heal all</div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1180, &quot;height&quot;: 700}}">
+class Component extends DCLogic {
+  state = { selectedRepo: null };
+  renderVals() {
+    const reports = this.props.reports || [];
+    const sel = this.state.selectedRepo || (reports[0] && reports[0].repo);
+    const reportsOut = reports.map(r => ({
+      ...r, onClick: () => this.setState({ selectedRepo: r.repo }),
+      itemStyle: 'padding:12px 14px; border-radius:8px; cursor:pointer; margin:2px; ' + (r.repo === sel ? 'background:#EEEBFE;' : ''),
+    }));
+    let selected = reports.find(r => r.repo === sel) || reports[0] || {};
+    const total = (selected.healthy || 0) + (selected.flaky || 0) + (selected.broken || 0) || 1;
+    selected = { ...selected, healthyPct: Math.round((selected.healthy||0)/total*100) + '%', flakyPct: Math.round((selected.flaky||0)/total*100) + '%', brokenPct: Math.round((selected.broken||0)/total*100) + '%' };
+    return { reports: reportsOut, selected, accentColor: this.props.accentColor ?? '#6D5EF0' };
+  }
+}
+
+</script>
+</body>
+</html>

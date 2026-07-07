@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { devAuthHook } from './auth.js';
 import { registerBatchesRoutes } from './routes/batches.js';
+import { registerConsoleDataRoutes } from './routes/console-data.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerHealsRoutes } from './routes/heals.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
   registerBatchesRoutes(app, db);
   registerFeedbackRoutes(app, db);
   registerQuarantinesRoutes(app, db);
+  registerConsoleDataRoutes(app, db);
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'Shutting down API');

@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { z } from 'zod';
 import type { Db } from '../db.js';
 import { withTenant } from '../db.js';
+import { resolveArtifactsDir } from '../repo-root.js';
 
 const createFeedbackSchema = z.object({
   manifestId: z.string().uuid(),
@@ -156,4 +159,99 @@ export function registerFeedbackRoutes(app: FastifyInstance, db: Db): void {
     });
     return reply.send(stats);
   });
+
+  const promoteSchema = z.object({ write: z.boolean().optional() });
+
+  // Promote a rated heal into an eval triple draft — mirrors `agent feedback --promote`.
+  app.post<{ Params: { manifestId: string } }>(
+    '/v1/feedback/promote/:manifestId',
+    async (request, reply) => {
+      const parsed = promoteSchema.safeParse(request.body ?? {});
+      if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+      const write = parsed.data.write ?? false;
+      const manifestId = request.params.manifestId;
+
+      const manifest = await withTenant(db, request.tenant, async (client) => {
+        const { rows } = await client.query<{ role: string; goal: { kind?: string } | null }>(
+          `SELECT role, goal FROM manifests WHERE id = $1`,
+          [manifestId],
+        );
+        return rows[0] ?? null;
+      });
+      if (!manifest) return reply.code(404).send({ error: 'manifest not found' });
+      const role = manifest.role ?? '';
+      if (!(role === 'triage' || manifest.goal?.kind === 'heal_test')) {
+        return reply.code(422).send({
+          error: `--promote works on heal manifests; ${manifestId.slice(0, 8)} is role=${role}.`,
+        });
+      }
+
+      const feedbackRows = await withTenant(db, request.tenant, async (client) => {
+        const { rows } = await client.query<{ verdict: 'up' | 'down'; source: string; note: string | null }>(
+          `SELECT verdict, source, note FROM heal_feedback WHERE manifest_id = $1 ORDER BY created_at DESC`,
+          [manifestId],
+        );
+        return rows;
+      });
+      if (feedbackRows.length === 0) {
+        return reply.code(422).send({
+          error: 'No feedback recorded — rate the manifest first (apply, or feedback --up/--down).',
+        });
+      }
+      const row = feedbackRows.find((r) => r.source === 'explicit') ?? feedbackRows[0];
+
+      const inputPath = path.join(resolveArtifactsDir(), manifestId, 'heal-input.json');
+      let vars: Record<string, string>;
+      try {
+        vars = JSON.parse(await fs.readFile(inputPath, 'utf8')) as Record<string, string>;
+      } catch {
+        return reply.code(422).send({
+          error: `${inputPath} not found — re-run the heal and promote that manifest.`,
+        });
+      }
+
+      const short = manifestId.slice(0, 8);
+      if (row.verdict === 'down' && row.note) {
+        vars.prior_feedback = [
+          '1 previous patch rejected by a human reviewer.',
+          '',
+          'Most instructive verdicts:',
+          `- REJECTED ${vars.test_path} (${vars.failure_category}): "${row.note.replace(/"/g, "'")}"`,
+          '',
+          'REJECTED notes are corrections from a human who saw a previous patch fail in this repo. Treat them as constraints — do not repeat those mistakes.',
+        ].join('\n');
+      }
+
+      const expected =
+        row.verdict === 'up'
+          ? { testFile: { mustContain: ['===FILE:'], mustNotContain: ['===REFUSE==='] } }
+          : { testFile: { mustContain: ['===REFUSE==='], mustNotContain: ['===FILE:'] } };
+
+      const triple = {
+        id: `healer.promoted.${short}.v1`,
+        role: 'healer',
+        tags: ['feedback', 'promoted', `promoted-${row.verdict}`],
+        difficulty: 'medium',
+        input: { extraVariables: vars },
+        expected,
+        metrics: { costMaxUSD: 0.01, latencyMaxMs: 60000 },
+      };
+
+      const target = `prompts/eval/corpus/healer-promoted-${short}.json`;
+      const body = JSON.stringify(triple, null, 2) + '\n';
+
+      if (write) {
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.writeFile(target, body);
+      }
+
+      return {
+        verdict: row.verdict,
+        target,
+        triple,
+        body,
+        written: write,
+      };
+    },
+  );
 }

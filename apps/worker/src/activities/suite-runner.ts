@@ -1,5 +1,10 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import {
+  playwrightInstallHint,
+  resolvePlaywrightCommand,
+  resolvePlaywrightProject,
+} from '../playwright-spawn.js';
 
 /**
  * Steward suite runner (Milestone D).
@@ -39,6 +44,8 @@ interface ReporterSuite {
 
 interface ReporterJson {
   suites?: ReporterSuite[];
+  /** Populated when globalSetup/globalTeardown or config load fails before tests run. */
+  errors?: Array<{ message?: string; stack?: string }>;
   stats?: { expected?: number; unexpected?: number; skipped?: number; flaky?: number };
   config?: { rootDir?: string };
 }
@@ -64,6 +71,8 @@ export interface SuiteRunOutcome {
   durationMs: number;
   results: TestResultRow[];
   stats: { total: number; passed: number; failed: number; skipped: number };
+  /** globalSetup / config errors from the JSON reporter (suites may be empty). */
+  setupErrors: string[];
   outputTail: string;
 }
 
@@ -127,6 +136,28 @@ export function extractTestResults(
   return rows;
 }
 
+/** Errors Playwright emits at the JSON root when setup fails before any test runs. */
+export function extractReporterErrors(json: ReporterJson | null): string[] {
+  if (!json?.errors?.length) return [];
+  return json.errors
+    .map((e) => {
+      const msg = stripAnsi(e.message ?? e.stack ?? '').trim();
+      return msg.split('\n')[0] ?? '';
+    })
+    .filter((s) => s.length > 0)
+    .map((line) => enrichPlaywrightError(line));
+}
+
+function enrichPlaywrightError(line: string): string {
+  if (/Executable doesn't exist at .*ms-playwright\/chromium-\d+/.test(line)) {
+    return (
+      `${line} — run \`npx playwright install chromium\` in the target repo ` +
+      `(Playwright version there may differ from browsers installed for other projects).`
+    );
+  }
+  return line;
+}
+
 export interface RunSuiteOptions {
   project?: string | null;
 }
@@ -147,19 +178,46 @@ export async function runPlaywrightSuite(
   timeoutMs: number,
   options: RunSuiteOptions = {},
 ): Promise<SuiteRunOutcome> {
+  const installHint = await playwrightInstallHint(repoRoot);
+  if (installHint) {
+    return {
+      exitCode: 1,
+      timedOut: false,
+      durationMs: 0,
+      results: [],
+      stats: { total: 0, passed: 0, failed: 0, skipped: 0 },
+      setupErrors: [],
+      outputTail: installHint,
+    };
+  }
+
+  const project = resolvePlaywrightProject(options.project);
+  let outcome = await runPlaywrightSuiteOnce(repoRoot, timeoutMs, project);
+
+  // Mis-detected project from onboarding → 0 tests. Retry without --project.
+  if (outcome.results.length === 0 && project) {
+    outcome = await runPlaywrightSuiteOnce(repoRoot, timeoutMs, undefined);
+  }
+
+  return outcome;
+}
+
+async function runPlaywrightSuiteOnce(
+  repoRoot: string,
+  timeoutMs: number,
+  project: string | undefined,
+): Promise<SuiteRunOutcome> {
+  const pw = await resolvePlaywrightCommand(repoRoot, 'run');
+
   return new Promise((resolve) => {
     const started = Date.now();
-    const args = ['playwright', 'test', '--reporter=json'];
-    const project =
-      options.project === null || options.project === ''
-        ? undefined
-        : options.project ?? process.env.PLAYWRIGHT_PROJECT ?? undefined;
+    const args = [...pw.prefixArgs, '--reporter=json'];
     if (project) args.push(`--project=${project}`);
 
-    const proc = spawn('npx', args, {
+    const proc = spawn(pw.command, args, {
       cwd: repoRoot,
       env: { ...process.env, CI: '1' },
-      shell: process.platform === 'win32',
+      shell: pw.shell,
     });
 
     let stdout = '';
@@ -189,6 +247,7 @@ export async function runPlaywrightSuite(
         }
       }
       const results = extractTestResults(json, filePrefixFrom(json, repoRoot));
+      const setupErrors = extractReporterErrors(json);
       const passed = results.filter((r) => r.status === 'passed').length;
       const skipped = results.filter((r) => r.status === 'skipped').length;
       resolve({
@@ -196,13 +255,14 @@ export async function runPlaywrightSuite(
         timedOut,
         durationMs: Date.now() - started,
         results,
+        setupErrors,
         stats: {
           total: results.length,
           passed,
           skipped,
           failed: results.length - passed - skipped,
         },
-        outputTail: `${stdout}\n${stderr}`.slice(-2000),
+        outputTail: formatPlaywrightOutput(stdout, stderr),
       });
     });
 
@@ -214,8 +274,19 @@ export async function runPlaywrightSuite(
         durationMs: Date.now() - started,
         results: [],
         stats: { total: 0, passed: 0, failed: 0, skipped: 0 },
+        setupErrors: [],
         outputTail: err.message,
       });
     });
   });
+}
+
+function formatPlaywrightOutput(stdout: string, stderr: string): string {
+  const combined = `${stdout}\n${stderr}`.trim();
+  if (!combined) return '(no output)';
+  // Prefer stderr when config failed before JSON reporter ran.
+  if (!stdout.includes('{') && stderr.trim()) {
+    return stderr.trim().slice(-2000);
+  }
+  return combined.slice(-2000);
 }

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="display:flex; flex-direction:column; gap:16px; max-width:820px;">
+
+  <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:20px;">
+    <div style="font-size:13.5px; font-weight:700; margin-bottom:12px;">Environment</div>
+    <sc-for list="{{ envVars }}" as="e" hint-placeholder-count="4">
+      <div style="display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #F5F6F8; font-size:12.5px;">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#4B5563; flex:1;">{{ e.name }}</span>
+        <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; color:{{ e.fg }}; background:{{ e.bg }};">{{ e.status }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:20px;">
+    <div style="font-size:13.5px; font-weight:700; margin-bottom:12px;">Doctor</div>
+    <sc-for list="{{ doctorChecks }}" as="d" hint-placeholder-count="4">
+      <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #F5F6F8; font-size:12.5px;">
+        <span style="width:7px; height:7px; border-radius:50%; background:{{ d.fg }};"></span>
+        <span style="flex:1;">{{ d.label }}</span>
+        <span style="color:{{ d.fg }}; font-weight:600;">{{ d.status }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:20px;">
+    <div style="font-size:13.5px; font-weight:700; margin-bottom:12px;">Prompt version pinning</div>
+    <sc-for list="{{ pins }}" as="p" hint-placeholder-count="3">
+      <div style="display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #F5F6F8; font-size:12.5px;">
+        <span style="flex:1; font-weight:600;">{{ p.role }}</span>
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#6B7280;">{{ p.value }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 820, &quot;height&quot;: 700}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      envVars: [
+        { name: 'ANTHROPIC_API_KEY', status: 'set', fg: '#16A34A', bg: '#DCFCE7' },
+        { name: 'AGENTICPW_WORKSPACE', status: 'dev-tenant', fg: '#6B7280', bg: '#EEF0F2' },
+        { name: 'AGENTICPW_MODEL', status: 'set', fg: '#16A34A', bg: '#DCFCE7' },
+        { name: 'GITHUB_TOKEN', status: 'missing', fg: '#DC2626', bg: '#FEE2E2' },
+      ],
+      doctorChecks: [
+        { label: 'API key reachable', status: 'OK', fg: '#16A34A' },
+        { label: 'Playwright browsers installed', status: 'OK', fg: '#16A34A' },
+        { label: 'Repo registrations valid', status: 'OK', fg: '#16A34A' },
+        { label: 'Storage state freshness', status: '1 expiring soon', fg: '#D97706' },
+      ],
+      pins: [
+        { role: 'explorer', value: 'latest' },
+        { role: 'generator', value: 'latest' },
+        { role: 'judge', value: 'pinned @ a1b2c3d' },
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>

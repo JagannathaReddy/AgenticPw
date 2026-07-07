@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:fixed; inset:0; background:rgba(20,22,27,0.5); z-index:400; display:flex; align-items:center; justify-content:center; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="width:640px; max-height:86vh; background:#fff; border-radius:14px; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,0.25); animation:fade-in 0.15s ease;">
+
+    <div style="display:flex; align-items:center; gap:10px; padding:18px 22px; border-bottom:1px solid #EEF0F2;">
+      <div style="font-size:15px; font-weight:700; flex:1;">New manifest</div>
+      <div style="display:flex; gap:6px;">
+        <sc-for list="{{ stepDots }}" as="d" hint-placeholder-count="3">
+          <span style="{{ d.style }}"></span>
+        </sc-for>
+      </div>
+      <div onClick="{{ closeWizard }}" style="cursor:pointer; color:#9CA3AF; font-size:16px; padding:4px 6px;">✕</div>
+    </div>
+
+    <div style="padding:22px; overflow-y:auto; flex:1;">
+
+      <!-- STEP 1: pick flow -->
+      <sc-if value="{{ isStep1 }}">
+        <div style="font-size:13px; color:#6B7280; margin-bottom:16px;">What do you want AgenticPw to do?</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <sc-for list="{{ flowCards }}" as="fc" hint-placeholder-count="5">
+            <div onClick="{{ fc.onClick }}" style="border:1px solid #E4E6EB; border-radius:10px; padding:14px; cursor:pointer;" style-hover="border-color:{{ accentColor }}; background:#FAFAFF;">
+              <div style="font-size:13.5px; font-weight:700;">{{ fc.title }}</div>
+              <div style="font-size:12px; color:#9CA3AF; margin-top:4px;">{{ fc.desc }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- STEP 2: form -->
+      <sc-if value="{{ isStep2 }}">
+
+        <sc-if value="{{ isAdd }}">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <div style="{{ labelStyle }}">Goal</div>
+              <textarea value="{{ form.goal }}" onChange="{{ onGoal }}" rows="3" placeholder="Describe the scenario in plain English…" style="{{ textareaStyle }}"></textarea>
+              <div style="font-size:11px; color:#9CA3AF; margin-top:3px; text-align:right;">{{ goalCount }}/500</div>
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">URL</div>
+              <input value="{{ form.url }}" onChange="{{ onUrl }}" placeholder="https://…" style="{{ inputStyle }}" />
+              <sc-if value="{{ preflightChecked }}">
+                <sc-if value="{{ preflightBlocked }}">
+                  <div style="margin-top:8px; padding:10px 12px; background:#FEF3C7; border-radius:8px; font-size:12px; color:#92400E; line-height:1.5;">This URL requires auth. Attach a storage state (auto-detected: <b>.auth/iac.storage.json</b>, refreshed 3h ago) or upload a fresh one.</div>
+                </sc-if>
+                <sc-if value="{{ preflightOk }}">
+                  <div style="margin-top:8px; padding:8px 12px; background:#DCFCE7; border-radius:8px; font-size:12px; color:#15803D;">Reachable, no auth wall detected.</div>
+                </sc-if>
+              </sc-if>
+              <div onClick="{{ runPreflight }}" style="display:inline-block; margin-top:8px; font-size:11.5px; font-weight:600; color:{{ accentColor }}; cursor:pointer;">Run pre-flight check</div>
+            </div>
+            <sc-if value="{{ preflightBlocked }}">
+              <div>
+                <div style="{{ labelStyle }}">Storage state</div>
+                <div style="display:flex; gap:8px;">
+                  <div onClick="{{ useAutoDetected }}" style="{{ storageAutoStyle }}">Use auto-detected</div>
+                  <div style="font-size:12.5px; font-weight:600; color:#4B5563; padding:9px 14px; border:1px solid #E4E6EB; border-radius:8px; cursor:pointer;">Upload…</div>
+                </div>
+              </div>
+            </sc-if>
+            <div>
+              <div style="{{ labelStyle }}">Expected outcomes</div>
+              <sc-for list="{{ outcomeRows }}" as="o" hint-placeholder-count="1">
+                <input value="{{ o.value }}" onChange="{{ o.onChange }}" placeholder="e.g. status pill reads ON" style="{{ inputStyle }}; margin-bottom:6px;" />
+              </sc-for>
+              <div onClick="{{ addOutcome }}" style="font-size:11.5px; font-weight:600; color:{{ accentColor }}; cursor:pointer;">+ add outcome</div>
+            </div>
+            <div style="display:flex; gap:20px;">
+              <div style="flex:1;">
+                <div style="{{ labelStyle }}">Max steps: {{ form.maxSteps }}</div>
+                <input type="range" min="3" max="20" value="{{ form.maxSteps }}" onChange="{{ onMaxSteps }}" style="width:100%;" />
+              </div>
+              <div style="flex:1;">
+                <div style="{{ labelStyle }}">Repo</div>
+                <select value="{{ form.repo }}" onChange="{{ onRepo }}" style="{{ inputStyle }}">
+                  <sc-for list="{{ repoOptions }}" as="ro" hint-placeholder-count="3">
+                    <option value="{{ ro }}">{{ ro }}</option>
+                  </sc-for>
+                </select>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isHeal }}">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <div style="{{ labelStyle }}">Spec path</div>
+              <input value="{{ form.specPath }}" onChange="{{ onSpecPath }}" placeholder="tests/ui/iac/create-streetlight.spec.ts" style="{{ inputStyle }}" />
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">Repo</div>
+              <select value="{{ form.repo }}" onChange="{{ onRepo }}" style="{{ inputStyle }}">
+                <sc-for list="{{ repoOptions }}" as="ro" hint-placeholder-count="3">
+                  <option value="{{ ro }}">{{ ro }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">Include globs</div>
+              <sc-for list="{{ globRows }}" as="g" hint-placeholder-count="1">
+                <input value="{{ g.value }}" onChange="{{ g.onChange }}" placeholder="tests/ui/iac/**" style="{{ inputStyle }}; margin-bottom:6px;" />
+              </sc-for>
+              <div onClick="{{ addGlob }}" style="font-size:11.5px; font-weight:600; color:{{ accentColor }}; cursor:pointer;">+ add glob</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isImprove }}">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <div style="{{ labelStyle }}">Spec path</div>
+              <input value="{{ form.specPath }}" onChange="{{ onSpecPath }}" placeholder="tests/ui/checkout/apply-coupon.spec.ts" style="{{ inputStyle }}" />
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">Repo</div>
+              <select value="{{ form.repo }}" onChange="{{ onRepo }}" style="{{ inputStyle }}">
+                <sc-for list="{{ repoOptions }}" as="ro" hint-placeholder-count="3">
+                  <option value="{{ ro }}">{{ ro }}</option>
+                </sc-for>
+              </select>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isBatch }}">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <div style="{{ labelStyle }}">Source</div>
+              <div style="display:flex; gap:8px;">
+                <div onClick="{{ setSourceGlob }}" style="{{ sourceGlobStyle }}">Glob</div>
+                <div onClick="{{ setSourceSteward }}" style="{{ sourceStewardStyle }}">From Steward candidates</div>
+              </div>
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">Max cost</div>
+              <input value="{{ form.maxCost }}" onChange="{{ onMaxCost }}" style="{{ inputStyle }}; width:120px;" />
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">Repo</div>
+              <select value="{{ form.repo }}" onChange="{{ onRepo }}" style="{{ inputStyle }}">
+                <sc-for list="{{ repoOptions }}" as="ro" hint-placeholder-count="3">
+                  <option value="{{ ro }}">{{ ro }}</option>
+                </sc-for>
+              </select>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSteward }}">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+              <div style="{{ labelStyle }}">Repo</div>
+              <select value="{{ form.repo }}" onChange="{{ onRepo }}" style="{{ inputStyle }}">
+                <sc-for list="{{ repoOptions }}" as="ro" hint-placeholder-count="3">
+                  <option value="{{ ro }}">{{ ro }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div>
+              <div style="{{ labelStyle }}">Run count: {{ form.runCount }}</div>
+              <input type="range" min="1" max="10" value="{{ form.runCount }}" onChange="{{ onRunCount }}" style="width:100%;" />
+            </div>
+          </div>
+        </sc-if>
+
+      </sc-if>
+
+      <!-- STEP 3: review -->
+      <sc-if value="{{ isStep3 }}">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <div style="{{ labelStyle }}">Equivalent CLI command</div>
+            <div style="background:#14161B; color:#D5D8DE; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; padding:12px 14px; border-radius:8px; white-space:pre-wrap; word-break:break-all;">{{ cliEquivalent }}</div>
+          </div>
+          <div style="display:flex; gap:20px;">
+            <div><div style="font-size:11px; color:#9CA3AF; font-weight:700;">ESTIMATED COST</div><div style="font-size:18px; font-weight:700; margin-top:4px;">{{ costEstimate }}</div></div>
+            <div><div style="font-size:11px; color:#9CA3AF; font-weight:700;">FLOW</div><div style="font-size:18px; font-weight:700; margin-top:4px; text-transform:capitalize;">{{ flow }}</div></div>
+            <div><div style="font-size:11px; color:#9CA3AF; font-weight:700;">REPO</div><div style="font-size:18px; font-weight:700; margin-top:4px;">{{ form.repo }}</div></div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; padding:16px 22px; border-top:1px solid #EEF0F2;">
+      <sc-if value="{{ showBack }}">
+        <div onClick="{{ wizardBack }}" style="font-size:12.5px; font-weight:600; color:#4B5563; padding:9px 16px; border:1px solid #E4E6EB; border-radius:8px; cursor:pointer;">Back</div>
+      </sc-if>
+      <div style="flex:1;"></div>
+      <sc-if value="{{ showNext }}">
+        <div onClick="{{ wizardNext }}" style="{{ nextButtonStyle }}">Next</div>
+      </sc-if>
+      <sc-if value="{{ showSubmit }}">
+        <div onClick="{{ submitWizard }}" style="font-size:12.5px; font-weight:700; color:#fff; padding:9px 18px; background:{{ accentColor }}; border-radius:8px; cursor:pointer;">Submit</div>
+      </sc-if>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 680, &quot;height&quot;: 640}}">
+const FLOW_CARDS = [
+  { key: 'add', title: 'Add', desc: 'Describe a new test in English' },
+  { key: 'heal', title: 'Heal', desc: 'Fix a failing spec' },
+  { key: 'improve', title: 'Improve', desc: 'Polish an existing spec' },
+  { key: 'batch', title: 'Batch', desc: 'Heal many specs at once' },
+  { key: 'steward', title: 'Steward', desc: 'Run a suite-health check' },
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    const accentColor = this.props.accentColor ?? '#6D5EF0';
+    const step = this.props.step || 1;
+    const flow = this.props.flow;
+    const form = this.props.form || {};
+    const updateField = this.props.updateField;
+    const repoOptions = this.props.repos || [];
+
+    const labelStyle = 'font-size:12px; font-weight:700; color:#4B5563; margin-bottom:6px;';
+    const inputStyle = 'width:100%; box-sizing:border-box; padding:9px 11px; border:1px solid #E4E6EB; border-radius:8px; font-size:13px; outline:none; font-family:inherit;';
+    const textareaStyle = inputStyle + ' resize:vertical;';
+
+    const canNext2 = flow === 'add' ? !!form.goal && !!form.url && !(this.props.preflightBlocked && !form.storageState)
+      : flow === 'heal' ? !!form.specPath
+      : flow === 'improve' ? !!form.specPath
+      : true;
+
+    const outcomeRows = (form.outcomes || ['']).map((v, i) => ({
+      value: v, onChange: (e) => { const arr = form.outcomes.slice(); arr[i] = e.target.value; updateField('outcomes', arr); },
+    }));
+    const globRows = (form.includeGlobs || ['']).map((v, i) => ({
+      value: v, onChange: (e) => { const arr = form.includeGlobs.slice(); arr[i] = e.target.value; updateField('includeGlobs', arr); },
+    }));
+
+    const cliMap = {
+      add: `agent add --goal "${(form.goal||'').slice(0,60)}" --url "${form.url||''}" --repo ${form.repo} --max-steps ${form.maxSteps}`,
+      heal: `agent heal --spec ${form.specPath||''} --repo ${form.repo}`,
+      improve: `agent improve --spec ${form.specPath||''} --repo ${form.repo}`,
+      batch: `agent batch --source ${form.batchSource} --max-cost ${form.maxCost} --repo ${form.repo}`,
+      steward: `agent steward --repo ${form.repo} --runs ${form.runCount}`,
+    };
+    const costMap = { add: '$0.002 – $0.006', heal: '$0.010 – $0.020', improve: '$0.006 – $0.012', batch: 'up to $' + (form.maxCost || 5), steward: '$0.03 – $0.08' };
+
+    return {
+      accentColor,
+      isStep1: step === 1, isStep2: step === 2, isStep3: step === 3,
+      stepDots: [1, 2, 3].map(n => ({ style: 'width:7px; height:7px; border-radius:50%; background:' + (n <= step ? accentColor : '#E4E6EB') + ';' })),
+      flowCards: FLOW_CARDS.map(fc => ({ ...fc, onClick: () => this.props.pickFlow(fc.key) })),
+      flow, form,
+      isAdd: flow === 'add', isHeal: flow === 'heal', isImprove: flow === 'improve', isBatch: flow === 'batch', isSteward: flow === 'steward',
+      labelStyle, inputStyle, textareaStyle,
+      goalCount: (form.goal || '').length,
+      onGoal: (e) => updateField('goal', e.target.value.slice(0, 500)),
+      onUrl: (e) => updateField('url', e.target.value),
+      onSpecPath: (e) => updateField('specPath', e.target.value),
+      onRepo: (e) => updateField('repo', e.target.value),
+      onMaxSteps: (e) => updateField('maxSteps', +e.target.value),
+      onMaxCost: (e) => updateField('maxCost', +e.target.value || 0),
+      onRunCount: (e) => updateField('runCount', +e.target.value),
+      repoOptions,
+      outcomeRows, addOutcome: () => updateField('outcomes', [...(form.outcomes || ['']), '']),
+      globRows, addGlob: () => updateField('includeGlobs', [...(form.includeGlobs || ['']), '']),
+      preflightChecked: this.props.preflightChecked, preflightBlocked: this.props.preflightBlocked,
+      preflightOk: this.props.preflightChecked && !this.props.preflightBlocked,
+      runPreflight: this.props.runPreflight,
+      useAutoDetected: () => updateField('storageState', 'auto:.auth/iac.storage.json'),
+      storageAutoStyle: 'font-size:12.5px; font-weight:700; color:#fff; padding:9px 14px; background:' + accentColor + '; border-radius:8px; cursor:pointer;',
+      setSourceGlob: () => updateField('batchSource', 'glob'),
+      setSourceSteward: () => updateField('batchSource', 'from-steward'),
+      sourceGlobStyle: 'font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:8px; cursor:pointer; ' + (form.batchSource === 'glob' ? 'background:#EEEBFE; color:' + accentColor + ';' : 'border:1px solid #E4E6EB; color:#4B5563;'),
+      sourceStewardStyle: 'font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:8px; cursor:pointer; ' + (form.batchSource === 'from-steward' ? 'background:#EEEBFE; color:' + accentColor + ';' : 'border:1px solid #E4E6EB; color:#4B5563;'),
+      cliEquivalent: cliMap[flow] || '',
+      costEstimate: costMap[flow] || '—',
+      showBack: step > 1,
+      showNext: step < 3,
+      showSubmit: step === 3,
+      nextButtonStyle: 'font-size:12.5px; font-weight:700; color:#fff; padding:9px 18px; border-radius:8px; cursor:pointer; background:' + (canNext2 || step !== 2 ? accentColor : '#C7C2FA') + ';',
+      wizardNext: () => { if (step === 2 && !canNext2) return; this.props.wizardNext(); },
+      wizardBack: this.props.wizardBack,
+      submitWizard: this.props.submitWizard,
+      closeWizard: this.props.closeWizard,
+      pickFlow: this.props.pickFlow,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

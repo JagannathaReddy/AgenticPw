@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="display:flex; flex-direction:column; gap:20px; max-width:1180px;">
+
+  <div style="display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:16px;">
+
+    <!-- Suite health -->
+    <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:12.5px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:14px;">Suite health</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <sc-for list="{{ summary.repos }}" as="r" hint-placeholder-count="3">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:{{ r.healthFg }}; flex:none;"></span>
+            <span style="font-size:13.5px; font-weight:600; flex:1;">{{ r.label }}</span>
+            <span style="font-size:12px; color:#6B7280;">{{ r.tests }} tests</span>
+            <span style="font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:99px; color:{{ r.healthFg }}; background:{{ r.healthBg }};">{{ r.healthLabel }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- Cost -->
+    <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:18px 20px;">
+      <div style="font-size:12.5px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:10px;">Cost</div>
+      <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums;">{{ summary.costWeekLabel }}</div>
+      <div style="font-size:12px; color:#9CA3AF; margin-bottom:10px;">this week · {{ summary.costMonthLabel }} this month</div>
+      <svg width="100%" height="34" viewBox="0 0 140 34" preserveAspectRatio="none">
+        <polyline points="0,26 20,22 40,24 60,16 80,18 100,8 120,12 140,4" fill="none" stroke="{{ accentColor }}" stroke-width="2"></polyline>
+      </svg>
+    </div>
+
+    <!-- Pending feedback / doctor -->
+    <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:12px;">
+      <div>
+        <div style="font-size:12.5px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:0.03em;">Pending feedback</div>
+        <div style="font-size:24px; font-weight:700; margin-top:4px;">{{ summary.pendingFeedback }}</div>
+      </div>
+      <div style="height:1px; background:#EEF0F2;"></div>
+      <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:#16A34A; font-weight:600;">
+        <span style="width:7px; height:7px; border-radius:50%; background:#16A34A;"></span>
+        Doctor: all checks passing
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div onClick="{{ appliedClick }}" style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:16px 20px; cursor:pointer;">
+      <div style="font-size:12px; color:#6B7280; font-weight:600;">Heals applied this week</div>
+      <div style="font-size:22px; font-weight:700; color:#16A34A; margin-top:4px;">{{ summary.appliedCount }}</div>
+    </div>
+    <div onClick="{{ rejectedClick }}" style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; padding:16px 20px; cursor:pointer;">
+      <div style="font-size:12px; color:#6B7280; font-weight:600;">Refused this week</div>
+      <div style="font-size:22px; font-weight:700; color:#DC2626; margin-top:4px;">{{ summary.rejectedCount }}</div>
+    </div>
+  </div>
+
+  <!-- Recent manifests -->
+  <div style="background:#fff; border:1px solid #E4E6EB; border-radius:12px; overflow:hidden;">
+    <div style="display:flex; align-items:center; padding:14px 20px; border-bottom:1px solid #EEF0F2;">
+      <div style="font-size:13.5px; font-weight:700;">Recent manifests</div>
+      <div style="flex:1;"></div>
+      <div onClick="{{ viewAll }}" style="font-size:12.5px; font-weight:600; color:{{ accentColor }}; cursor:pointer;">View all →</div>
+    </div>
+    <sc-for list="{{ recentManifests }}" as="m" hint-placeholder-count="5">
+      <div onClick="{{ m.onOpen }}" style="display:flex; align-items:center; gap:14px; padding:12px 20px; border-bottom:1px solid #F5F6F8; cursor:pointer;" style-hover="background:#FAFAFB;">
+        <span style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; color:{{ m.flowFg }}; background:{{ m.flowBg }}; width:56px; text-align:center;">{{ m.flowLabel }}</span>
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; color:#6B7280; width:78px;">{{ m.shortId }}</span>
+        <span style="font-size:13px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ m.target }}</span>
+        <span style="font-size:12px; color:#9CA3AF; width:72px; text-align:right; font-variant-numeric:tabular-nums;">{{ m.costLabel }}</span>
+        <span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; color:{{ m.statusFg }}; background:{{ m.statusBg }}; width:66px; text-align:center;">{{ m.statusLabel }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1180, &quot;height&quot;: 900}}">
+class Component extends DCLogic {
+  renderVals() {
+    const openManifest = this.props.openManifest;
+    const goToPage = this.props.goToPage;
+    const recentManifests = (this.props.recentManifests || []).map(m => ({ ...m, onOpen: () => openManifest(m.id) }));
+    return {
+      summary: this.props.summary || {},
+      recentManifests,
+      accentColor: this.props.accentColor ?? '#6D5EF0',
+      viewAll: () => goToPage('manifests'),
+      appliedClick: () => goToPage('manifests'),
+      rejectedClick: () => goToPage('manifests'),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { resolvePlaywrightCommand } from '../playwright-spawn.js';
 
 /**
  * Detect a target repo's Playwright project layout by asking Playwright
@@ -95,13 +96,14 @@ export function detectPlaywrightConfig(
   repoRoot: string,
   timeoutMs = 20_000,
 ): Promise<DetectedPlaywrightConfig | null> {
-  return new Promise((resolve) => {
+  return resolvePlaywrightCommand(repoRoot, 'list').then((pw) =>
+    new Promise((resolve) => {
     const started = Date.now();
-    const args = ['playwright', 'test', '--list', '--reporter=json'];
-    const proc = spawn('npx', args, {
+    const args = [...pw.prefixArgs, '--reporter=json'];
+    const proc = spawn(pw.command, args, {
       cwd: repoRoot,
       env: { ...process.env, CI: '1' },
-      shell: process.platform === 'win32',
+      shell: pw.shell,
     });
 
     let stdout = '';
@@ -155,5 +157,6 @@ export function detectPlaywrightConfig(
       resolve(null);
     });
     void stderr;
-  });
+  }),
+  );
 }

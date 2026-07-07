@@ -1,6 +1,6 @@
 {
   "name": "test-agent-platform",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "description": "Agentic QA platform — Coverage + Onboarding + Triage + Improve + Steward running locally",
   "workspaces": [
@@ -8,9 +8,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,worker -c cyan,magenta \"npm:dev -w @poc/api\" \"npm:dev -w @poc/worker\"",
+    "dev": "concurrently -n api,worker,web -c cyan,magenta,green \"npm:dev -w @poc/api\" \"npm:dev -w @poc/worker\" \"npm:dev -w @poc/web\"",
     "agent": "tsx --env-file-if-exists=.env scripts/test-agent.ts",
-    "build": "npm run build -w @poc/types && npm run build -w @poc/prompts && npm run build -w @poc/eval-harness && npm run build -w @poc/rls-tests && npm run build -w @poc/api && npm run build -w @poc/worker",
+    "build": "npm run build -w @poc/types && npm run build -w @poc/prompts && npm run build -w @poc/eval-harness && npm run build -w @poc/rls-tests && npm run build -w @poc/api && npm run build -w @poc/worker && npm run build -w @poc/web",
     "typecheck": "tsc -b packages/ops-types packages/ops-prompts apps/api apps/worker",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
@@ -30,5 +30,9 @@
     "concurrently": "^9.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   }
 }

@@ -15,7 +15,7 @@ function req(name: string, fallback?: string): string {
 
 export function loadConfig(): ApiConfig {
   return {
-    port: Number(process.env.API_PORT ?? 3000),
+    port: Number(process.env.API_PORT ?? 3001),
     host: process.env.API_HOST ?? '127.0.0.1',
     databaseUrl: req('DATABASE_URL', 'postgres://platform:platform@127.0.0.1:5433/platform'),
     devWorkspaceId: req('DEV_WORKSPACE_ID', '00000000-0000-0000-0000-000000000001'),

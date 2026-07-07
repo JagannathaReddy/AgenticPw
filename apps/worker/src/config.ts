@@ -1,3 +1,5 @@
+import { resolveArtifactsDir } from './repo-root.js';
+
 export interface WorkerConfig {
   databaseUrl: string;
   pollIntervalMs: number;
@@ -73,7 +75,7 @@ export function loadConfig(): WorkerConfig {
     databaseUrl: req('DATABASE_URL', 'postgres://platform:platform@127.0.0.1:5433/platform'),
     pollIntervalMs: Number(process.env.WORKER_POLL_MS ?? 1000),
     concurrency: Number(process.env.WORKER_CONCURRENCY ?? 1),
-    artifactsDir: req('ARTIFACTS_DIR', './local-artifacts'),
+    artifactsDir: resolveArtifactsDir(),
     devWorkspaceId: req('DEV_WORKSPACE_ID', '00000000-0000-0000-0000-000000000001'),
     devOrgId: req('DEV_ORG_ID', '00000000-0000-0000-0000-000000000000'),
 

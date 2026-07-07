@@ -29,7 +29,9 @@ echo "════════════════════════�
 echo "  Local dev environment ready."
 echo ""
 echo "  Next:"
-echo "    npm run dev                          # starts api + worker"
+echo "    npm run dev                          # starts api + worker + web console"
+echo ""
+echo "  Web console: http://127.0.0.1:3000"
 echo ""
 echo "  Submit a test manifest:"
 cat <<'EOF'

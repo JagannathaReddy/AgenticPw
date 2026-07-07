@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    body { margin: 0; background: #F5F6F8; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #D5D8DE; border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+  </style>
+  <script type="text/babel" src="./tweaks-panel.jsx"></script>
+</helmet>
+
+<x-import component-from-global-scope="TweaksPanel" from="./tweaks-panel.jsx" hint-size="0,0" style="display:none"></x-import>
+
+<div style="display:flex; height:100vh; width:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#14161B; background:#F5F6F8; overflow:hidden;">
+
+  <!-- SIDEBAR -->
+  <div style="width:224px; flex:none; background:#15171C; display:flex; flex-direction:column; padding:16px 12px; box-sizing:border-box;">
+    <div style="display:flex; align-items:center; gap:8px; padding:8px 8px 20px; color:#fff;">
+      <div style="width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,{{accentColor}},#9A8CFF); flex:none;"></div>
+      <div style="font-weight:700; font-size:14.5px; letter-spacing:-0.01em;">AgenticPw</div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <div onClick="{{ nav.dashboard }}" style="{{ navItemStyle.dashboard }}" style-hover="background:#1F2229;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+        <span>Dashboard</span>
+      </div>
+      <div onClick="{{ nav.manifests }}" style="{{ navItemStyle.manifests }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v4H4z"></path><path d="M4 11h16v4H4z"></path><path d="M4 18h10"></path></svg>
+        <span>Manifests</span>
+      </div>
+      <div onClick="{{ nav.repos }}" style="{{ navItemStyle.repos }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V6a2 2 0 0 1 2-2h9l5 5v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path><path d="M14 4v5h5"></path></svg>
+        <span>Repos</span>
+      </div>
+      <div onClick="{{ nav.steward }}" style="{{ navItemStyle.steward }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z"></path></svg>
+        <span>Steward</span>
+      </div>
+      <div onClick="{{ nav.batches }}" style="{{ navItemStyle.batches }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+        <span>Batches</span>
+      </div>
+      <div onClick="{{ nav.feedback }}" style="{{ navItemStyle.feedback }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 11v6M7 11l-2 1v5l2 1M17 11v6M17 11l2 1v5l-2 1M7 11h10M7 17h10"></path></svg>
+        <span>Feedback</span>
+      </div>
+      <div onClick="{{ nav.settings }}" style="{{ navItemStyle.settings }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.96a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.14.64.6 1.16 1.24 1.4.2.08.42.12.64.12H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.48z"></path></svg>
+        <span>Settings</span>
+      </div>
+    </div>
+
+    <div style="margin-top:auto; padding:10px 8px; border-top:1px solid #24262D;">
+      <div style="font-size:11px; color:#6B7280;">Workspace</div>
+      <div style="font-size:12.5px; color:#D5D8DE; font-weight:600;">dev-tenant</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+
+    <!-- TOPBAR -->
+    <div style="height:56px; flex:none; display:flex; align-items:center; gap:14px; padding:0 24px; background:#fff; border-bottom:1px solid #E4E6EB;">
+      <div style="font-size:15px; font-weight:700;">{{ pageTitle }}</div>
+      <div style="flex:1;"></div>
+      <div style="display:flex; align-items:center; gap:6px; padding:6px 12px; background:#F5F6F8; border-radius:8px; font-size:12.5px; color:#4B5563;">
+        <span>Cost this week</span>
+        <span style="font-weight:700; color:#14161B; font-variant-numeric:tabular-nums;">{{ costThisWeekLabel }}</span>
+      </div>
+      <div onClick="{{ openWizard }}" style="display:flex; align-items:center; gap:6px; background:{{accentColor}}; color:#fff; font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px; cursor:pointer;" style-hover="opacity:0.9;">
+        <span>+ New</span>
+      </div>
+      <div style="width:30px; height:30px; border-radius:50%; background:#E4E6EB; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#4B5563;">QA</div>
+    </div>
+
+    <!-- CONTENT -->
+    <div style="flex:1; overflow-y:auto; padding:28px 32px;">
+
+      <sc-if value="{{ isDashboard }}">
+        <dc-import name="DashboardPage" hint-size="100%,100%"
+          summary="{{ dashboardSummary }}" recentManifests="{{ recentManifestRows }}"
+          openManifest="{{ openManifest }}" goToPage="{{ goToPage }}" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isManifests }}">
+        <dc-import name="ManifestsPage" hint-size="100%,100%"
+          rows="{{ filteredManifestRows }}" filters="{{ filters }}" setFilter="{{ setFilter }}"
+          openManifest="{{ openManifest }}" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isManifestDetail }}">
+        <dc-import name="ManifestDetailPage" hint-size="100%,100%"
+          manifest="{{ selectedManifest }}" activeTab="{{ state.activeTab }}" setTab="{{ setTab }}"
+          apply="{{ applyManifest }}" reject="{{ rejectManifest }}" giveFeedback="{{ giveFeedback }}"
+          goBack="{{ nav.manifests }}" accentColor="{{accentColor}}" toast="{{ state.toast }}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isRepos }}">
+        <dc-import name="ReposPage" hint-size="100%,100%" repos="{{ repoRows }}" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isSteward }}">
+        <dc-import name="StewardPage" hint-size="100%,100%" reports="{{ stewardReports }}" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isBatches }}">
+        <dc-import name="BatchesPage" hint-size="100%,100%" batches="{{ batchRows }}" openManifest="{{ openManifest }}" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isFeedback }}">
+        <dc-import name="FeedbackPage" hint-size="100%,100%" rows="{{ feedbackRows }}" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+      <sc-if value="{{ isSettings }}">
+        <dc-import name="SettingsPage" hint-size="100%,100%" accentColor="{{accentColor}}"></dc-import>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <!-- WIZARD MODAL -->
+  <sc-if value="{{ state.wizardOpen }}">
+    <dc-import name="NewManifestWizard" hint-size="100%,100%"
+      step="{{ state.wizardStep }}" flow="{{ state.wizardFlow }}" form="{{ state.wizardForm }}"
+      repos="{{ repoNames }}" preflightBlocked="{{ state.preflightBlocked }}" preflightChecked="{{ state.preflightChecked }}"
+      pickFlow="{{ pickFlow }}" wizardNext="{{ wizardNext }}" wizardBack="{{ wizardBack }}"
+      updateField="{{ updateWizardField }}" runPreflight="{{ runPreflight }}" submitWizard="{{ submitWizard }}"
+      closeWizard="{{ closeWizard }}" accentColor="{{accentColor}}"></dc-import>
+  </sc-if>
+
+  <!-- TOAST -->
+  <sc-if value="{{ state.toast }}">
+    <div style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#14161B; color:#fff; padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; box-shadow:0 8px 24px rgba(0,0,0,0.25); z-index:500; animation:fade-in 0.2s ease;">
+      {{ state.toast }}
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 900}, &quot;accentColor&quot;: {&quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#6D5EF0&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;#6D5EF0&quot;, &quot;#2563EB&quot;, &quot;#0E7C7B&quot;, &quot;#B45309&quot;]}}">
+const REPOS = [
+  { name: 'cellular_automation', label: 'Cellular Automation', tests: 142, health: 'green', flaky: 3, broken: 0 },
+  { name: 'checkout_flow', label: 'Checkout Flow', tests: 58, health: 'amber', flaky: 5, broken: 2 },
+  { name: 'admin_portal', label: 'Admin Portal', tests: 31, health: 'green', flaky: 0, broken: 0 },
+];
+
+const now = Date.now();
+const min = 60000, hr = 3600000, day = 86400000;
+
+const RAW_MANIFESTS = [
+  { id: '6f82604c-91a3-4d2e-8f61-3b9a7c4e2210', flow: 'heal', status: 'applied', repo: 'cellular_automation', target: 'tests/ui/iac/create-streetlight.spec.ts', category: 'locator_drift', duration: 143, cost: 0.0186, feedback: 'up', feedbackNote: 'Verified locally, merged in PR #4231', submittedAt: now - 2*hr },
+  { id: 'a3d81f90-6612-4f0a-9d3e-1a7bc44f0021', flow: 'add', status: 'running', repo: 'cellular_automation', target: 'https://qa.example/rtp', category: null, duration: 38, cost: 0.0021, feedback: null, submittedAt: now - 40*1000 },
+  { id: '9c2e5b11-2c40-4a91-8e7d-5f1c9b302abc', flow: 'heal', status: 'rejected', repo: 'cellular_automation', target: 'tests/ui/iac/checkout-total.spec.ts', category: 'product_bug', duration: 96, cost: 0.0140, feedback: 'down', feedbackNote: 'Real bug — filed TICKET-884', submittedAt: now - 5*hr },
+  { id: 'e751a2c4-88f1-4c3d-9a6e-002c1fbb7712', flow: 'improve', status: 'accepted', repo: 'checkout_flow', target: 'tests/ui/checkout/apply-coupon.spec.ts', category: 'polish', duration: 61, cost: 0.0091, feedback: null, submittedAt: now - 1*day },
+  { id: '12ab99f0-4e2b-4a10-8b7c-9e001a2fbb90', flow: 'batch', status: 'running', repo: 'cellular_automation', target: 'batch of 5 candidates', category: null, duration: 210, cost: 0.31, maxCost: 5, feedback: null, submittedAt: now - 3*min, children: ['9c2e5b11-2c40-4a91-8e7d-5f1c9b302abc', 'b6f231aa-cc12-4d9e-9a3f-77201cbb0f14', '3e9d7710-1a2b-4c3d-8e9f-001122abcdef'] },
+  { id: '7d40c8e3-1234-4a5b-9c6d-778899aabbcc', flow: 'steward', status: 'accepted', repo: 'admin_portal', target: 'suite health run', category: null, duration: 300, cost: 0.05, feedback: null, submittedAt: now - 1*day - 3*hr },
+  { id: 'b6f231aa-cc12-4d9e-9a3f-77201cbb0f14', flow: 'heal', status: 'rejected', repo: 'checkout_flow', target: 'tests/ui/checkout/gift-card.spec.ts', category: 'flaky', duration: 88, cost: 0.0113, feedback: 'down', feedbackNote: 'Flaky at the infra level, not a locator issue', submittedAt: now - 6*hr },
+  { id: '3e9d7710-1a2b-4c3d-8e9f-001122abcdef', flow: 'heal', status: 'applied', repo: 'cellular_automation', target: 'tests/ui/iac/lamp-status.spec.ts', category: 'locator_drift', duration: 121, cost: 0.0172, feedback: 'up', feedbackNote: 'Clean swap, shipped', submittedAt: now - 8*hr },
+  { id: 'f402cc18-aa22-4b33-9c44-55d6e7f8091a', flow: 'add', status: 'applied', repo: 'admin_portal', target: 'https://qa.example/admin/roles', category: null, duration: 205, cost: 0.0038, feedback: 'up', feedbackNote: 'Great first pass', submittedAt: now - 2*day },
+  { id: '88a1de62-3344-4b55-9c66-77d8e9f00a1b', flow: 'heal', status: 'rejected', repo: 'cellular_automation', target: 'tests/ui/iac/sensor-alert.spec.ts', category: 'out_of_scope', duration: 74, cost: 0.0081, feedback: 'down', feedbackNote: 'Spec was intentionally testing an edge case, not a real drift', submittedAt: now - 9*hr },
+  { id: 'c015fe9b-5566-4c77-9d88-99e0f1a2b3c4', flow: 'improve', status: 'accepted', repo: 'cellular_automation', target: 'tests/ui/iac/battery-warning.spec.ts', category: 'polish', duration: 54, cost: 0.0065, feedback: null, submittedAt: now - 3*day },
+  { id: '41bb607d-6677-4d88-9e99-00f1a2b3c4d5', flow: 'heal', status: 'created', repo: 'checkout_flow', target: 'tests/ui/checkout/refund.spec.ts', category: 'pending', duration: null, cost: 0.010, feedback: null, submittedAt: now - 10*min },
+];
+
+const CATEGORY_LABEL = { locator_drift: 'Locator drift', out_of_scope: 'Out of scope', product_bug: 'Product bug', flaky: 'Flaky', polish: 'Polish', pending: 'Pending', };
+
+const STEWARD_REPORTS = [
+  { repo: 'cellular_automation', date: now - 1*day - 3*hr, healthy: 132, flaky: 7, broken: 3, healCandidates: 3, delta: { newFailures: 1, fixed: 4, stillBroken: 2 } },
+  { repo: 'checkout_flow', date: now - 2*day, healthy: 46, flaky: 8, broken: 4, healCandidates: 2, delta: { newFailures: 2, fixed: 1, stillBroken: 3 } },
+  { repo: 'admin_portal', date: now - 6*hr, healthy: 31, flaky: 0, broken: 0, healCandidates: 0, delta: { newFailures: 0, fixed: 1, stillBroken: 0 } },
+];
+
+function shortId(id) { return id.split('-')[0]; }
+function relTime(ts) {
+  const d = Date.now() - ts;
+  if (d < 60000) return Math.max(1, Math.round(d/1000)) + 's ago';
+  if (d < 3600000) return Math.round(d/60000) + 'm ago';
+  if (d < 86400000) return Math.round(d/3600000) + 'h ago';
+  return Math.round(d/86400000) + 'd ago';
+}
+function money(n) { if (n == null) return '—'; return '$' + n.toFixed(n < 1 ? 4 : 2); }
+
+const STATUS_META = {
+  created:  { label: 'Created',  fg: '#6B7280', bg: '#EEF0F2' },
+  running:  { label: 'Running',  fg: '#2563EB', bg: '#DBEAFE' },
+  accepted: { label: 'Accepted', fg: '#16A34A', bg: '#DCFCE7' },
+  rejected: { label: 'Rejected', fg: '#DC2626', bg: '#FEE2E2' },
+  applied:  { label: 'Applied',  fg: '#7C6CF6', bg: '#EEEBFE' },
+};
+const FLOW_META = {
+  add:     { label: 'Add',     fg: '#0891B2', bg: '#CFFAFE' },
+  heal:    { label: 'Heal',    fg: '#D97706', bg: '#FEF3C7' },
+  improve: { label: 'Improve', fg: '#7C6CF6', bg: '#EEEBFE' },
+  batch:   { label: 'Batch',   fg: '#DB2777', bg: '#FCE7F3' },
+  steward: { label: 'Steward', fg: '#16A34A', bg: '#DCFCE7' },
+};
+
+class Component extends DCLogic {
+  state = {
+    page: 'dashboard',
+    selectedManifestId: null,
+    activeTab: 'timeline',
+    wizardOpen: false,
+    wizardStep: 1,
+    wizardFlow: null,
+    wizardForm: { goal: '', url: '', outcomes: [''], maxSteps: 10, repo: 'cellular_automation', storageState: '', specPath: '', includeGlobs: [''], batchSource: 'from-steward', maxCost: 5, runCount: 3 },
+    preflightChecked: false,
+    preflightBlocked: false,
+    filters: { status: 'all', flow: 'all', repo: 'all', search: '' },
+    toast: null,
+    manifests: RAW_MANIFESTS.slice(),
+  };
+
+  componentDidMount() {
+    this._liveTimer = setInterval(() => {
+      this.setState(s => {
+        const list = s.manifests.slice();
+        const idx = list.findIndex(m => m.status === 'running' && m.flow !== 'batch');
+        if (idx === -1) return null;
+        const m = { ...list[idx] };
+        if (m.duration < 220) {
+          m.duration = (m.duration || 0) + 14;
+          m.cost = +(m.cost + 0.0006).toFixed(4);
+        } else {
+          m.status = 'accepted';
+        }
+        list[idx] = m;
+        return { manifests: list };
+      });
+    }, 2600);
+  }
+  componentWillUnmount() { clearInterval(this._liveTimer); }
+
+  goToPage = (page) => this.setState({ page, toast: null });
+  openManifest = (id) => this.setState({ page: 'manifest-detail', selectedManifestId: id, activeTab: 'timeline' });
+  setTab = (tab) => this.setState({ activeTab: tab });
+
+  openWizard = () => this.setState({ wizardOpen: true, wizardStep: 1, wizardFlow: null, preflightChecked: false, preflightBlocked: false,
+    wizardForm: { goal: '', url: '', outcomes: [''], maxSteps: 10, repo: 'cellular_automation', storageState: '', specPath: '', includeGlobs: [''], batchSource: 'from-steward', maxCost: 5, runCount: 3 } });
+  closeWizard = () => this.setState({ wizardOpen: false });
+  pickFlow = (flow) => this.setState({ wizardFlow: flow, wizardStep: 2 });
+  wizardNext = () => this.setState(s => ({ wizardStep: s.wizardStep + 1 }));
+  wizardBack = () => this.setState(s => ({ wizardStep: Math.max(1, s.wizardStep - 1) }));
+  updateWizardField = (key, val) => this.setState(s => ({ wizardForm: { ...s.wizardForm, [key]: val } }));
+
+  runPreflight = () => {
+    const url = this.state.wizardForm.url || '';
+    const looksAuthGated = /login|admin|account/i.test(url);
+    this.setState({ preflightChecked: true, preflightBlocked: looksAuthGated });
+  };
+
+  submitWizard = () => {
+    const s = this.state;
+    const id = 'gen' + Math.random().toString(16).slice(2, 10) + '-0000-4aaa-9bbb-' + Math.random().toString(16).slice(2, 14);
+    const flow = s.wizardFlow;
+    const target = flow === 'add' ? (s.wizardForm.url || 'new scenario') : (s.wizardForm.specPath || 'unspecified spec');
+    const m = {
+      id, flow, status: 'running', repo: s.wizardForm.repo, target,
+      category: null, duration: 0, cost: 0.001, feedback: null, submittedAt: Date.now(),
+    };
+    this.setState(prev => ({
+      manifests: [m, ...prev.manifests],
+      wizardOpen: false,
+      page: 'manifest-detail',
+      selectedManifestId: id,
+      activeTab: 'timeline',
+      toast: 'Manifest created — running…',
+    }));
+    setTimeout(() => this.setState({ toast: null }), 2600);
+  };
+
+  applyManifest = (id) => {
+    this.setState(prev => ({
+      manifests: prev.manifests.map(m => m.id === id ? { ...m, status: 'applied' } : m),
+      toast: 'Patch applied to working tree.',
+    }));
+    setTimeout(() => this.setState({ toast: null }), 2600);
+  };
+  rejectManifest = (id) => {
+    this.setState(prev => ({
+      manifests: prev.manifests.map(m => m.id === id ? { ...m, status: 'rejected' } : m),
+      toast: 'Manifest rejected.',
+    }));
+    setTimeout(() => this.setState({ toast: null }), 2600);
+  };
+  giveFeedback = (id, dir, note) => {
+    this.setState(prev => ({
+      manifests: prev.manifests.map(m => m.id === id ? { ...m, feedback: dir, feedbackNote: note || m.feedbackNote } : m),
+      toast: dir === 'up' ? 'Marked helpful.' : 'Marked not helpful.',
+    }));
+    setTimeout(() => this.setState({ toast: null }), 2200);
+  };
+
+  setFilter = (key, val) => this.setState(s => ({ filters: { ...s.filters, [key]: val } }));
+
+  buildRow(m) {
+    const sm = STATUS_META[m.status] || STATUS_META.created;
+    const fm = FLOW_META[m.flow] || FLOW_META.heal;
+    return {
+      id: m.id, shortId: shortId(m.id),
+      flowLabel: fm.label, flowFg: fm.fg, flowBg: fm.bg,
+      statusLabel: sm.label, statusFg: sm.fg, statusBg: sm.bg,
+      repo: m.repo, target: m.target,
+      categoryLabel: m.category ? (CATEGORY_LABEL[m.category] || m.category) : '—',
+      durationLabel: m.duration ? m.duration + 's' : '—',
+      costLabel: money(m.cost),
+      feedback: m.feedback,
+      relTime: relTime(m.submittedAt),
+      raw: m,
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const accentColor = this.props.accentColor ?? '#6D5EF0';
+    const manifests = s.manifests;
+    const rows = manifests.map(m => this.buildRow(m));
+
+    const filtered = rows.filter(r => {
+      const f = s.filters;
+      if (f.status !== 'all' && r.raw.status !== f.status) return false;
+      if (f.flow !== 'all' && r.raw.flow !== f.flow) return false;
+      if (f.repo !== 'all' && r.raw.repo !== f.repo) return false;
+      if (f.search && !(r.raw.target + ' ' + r.shortId).toLowerCase().includes(f.search.toLowerCase())) return false;
+      return true;
+    }).sort((a, b) => b.raw.submittedAt - a.raw.submittedAt);
+
+    const recent = rows.slice().sort((a, b) => b.raw.submittedAt - a.raw.submittedAt).slice(0, 6);
+
+    const costWeek = manifests.reduce((sum, m) => sum + (m.cost || 0), 0);
+    const pendingFeedback = manifests.filter(m => (m.status === 'accepted' || m.status === 'applied') && !m.feedback).length;
+    const appliedCount = manifests.filter(m => m.status === 'applied').length;
+    const rejectedCount = manifests.filter(m => m.status === 'rejected').length;
+
+    const repoRows = REPOS.map(r => {
+      const report = STEWARD_REPORTS.find(x => x.repo === r.name);
+      const repoManifests = rows.filter(x => x.repo === r.name).sort((a,b)=>b.raw.submittedAt-a.raw.submittedAt).slice(0,6);
+      return { ...r, healthLabel: r.health === 'green' ? 'Healthy' : (r.health === 'amber' ? 'Needs attention' : 'Broken'),
+        healthFg: r.health === 'green' ? '#16A34A' : (r.health === 'amber' ? '#D97706' : '#DC2626'),
+        healthBg: r.health === 'green' ? '#DCFCE7' : (r.health === 'amber' ? '#FEF3C7' : '#FEE2E2'),
+        lastReport: report ? relTime(report.date) : '—', recentManifests: repoManifests };
+    });
+
+    const stewardReports = STEWARD_REPORTS.map(r => ({
+      ...r, dateLabel: relTime(r.date),
+      healthPct: Math.round((r.healthy / (r.healthy + r.flaky + r.broken)) * 100),
+    }));
+
+    const batchManifests = manifests.filter(m => m.flow === 'batch').map(b => {
+      const children = (b.children || []).map(cid => rows.find(r => r.id === cid)).filter(Boolean);
+      return { ...this.buildRow(b), maxCost: b.maxCost, children };
+    });
+
+    const feedbackRows = rows.filter(r => r.feedback).sort((a,b)=>b.raw.submittedAt-a.raw.submittedAt);
+    const acceptRate = (() => {
+      const withFb = rows.filter(r => r.feedback);
+      if (!withFb.length) return 0;
+      return Math.round((withFb.filter(r => r.feedback === 'up').length / withFb.length) * 100);
+    })();
+
+    const selectedManifest = s.selectedManifestId ? manifests.find(m => m.id === s.selectedManifestId) : null;
+    const selRow = selectedManifest ? this.buildRow(selectedManifest) : null;
+
+    const pageTitleMap = {
+      dashboard: 'Dashboard', manifests: 'Manifests', 'manifest-detail': selRow ? ('Manifest ' + selRow.shortId) : 'Manifest',
+      repos: 'Repos', steward: 'Steward', batches: 'Batches', feedback: 'Feedback', settings: 'Settings',
+    };
+
+    const navBase = 'display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; color:#9CA3AF;';
+    const navActive = 'display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; color:#fff; background:#24262D;';
+    const mk = (key) => s.page === key || (key === 'manifests' && s.page === 'manifest-detail') ? navActive : navBase;
+
+    return {
+      accentColor,
+      pageTitle: pageTitleMap[s.page] || 'Console',
+      costThisWeekLabel: money(costWeek),
+      isDashboard: s.page === 'dashboard',
+      isManifests: s.page === 'manifests',
+      isManifestDetail: s.page === 'manifest-detail',
+      isRepos: s.page === 'repos',
+      isSteward: s.page === 'steward',
+      isBatches: s.page === 'batches',
+      isFeedback: s.page === 'feedback',
+      isSettings: s.page === 'settings',
+      navItemStyle: { dashboard: mk('dashboard'), manifests: mk('manifests'), repos: mk('repos'), steward: mk('steward'), batches: mk('batches'), feedback: mk('feedback'), settings: mk('settings') },
+      nav: {
+        dashboard: () => this.goToPage('dashboard'), manifests: () => this.goToPage('manifests'), repos: () => this.goToPage('repos'),
+        steward: () => this.goToPage('steward'), batches: () => this.goToPage('batches'), feedback: () => this.goToPage('feedback'), settings: () => this.goToPage('settings'),
+      },
+      openWizard: this.openWizard,
+      goToPage: this.goToPage,
+      openManifest: this.openManifest,
+      setTab: this.setTab,
+      applyManifest: this.applyManifest,
+      rejectManifest: this.rejectManifest,
+      giveFeedback: this.giveFeedback,
+      setFilter: this.setFilter,
+      state: s,
+      dashboardSummary: {
+        repos: repoRows, costWeekLabel: money(costWeek), costMonthLabel: money(costWeek * 3.6),
+        pendingFeedback, appliedCount, rejectedCount, totalThisWeek: manifests.length,
+      },
+      recentManifestRows: recent,
+      filteredManifestRows: filtered,
+      filters: s.filters,
+      selectedManifest: selRow,
+      repoRows,
+      repoNames: REPOS.map(r => r.name),
+      stewardReports,
+      batchRows: batchManifests,
+      feedbackRows,
+      acceptRate,
+
+      pickFlow: this.pickFlow,
+      wizardNext: this.wizardNext,
+      wizardBack: this.wizardBack,
+      updateWizardField: this.updateWizardField,
+      runPreflight: this.runPreflight,
+      submitWizard: this.submitWizard,
+      closeWizard: this.closeWizard,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

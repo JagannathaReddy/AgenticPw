@@ -6,7 +6,7 @@ import {
   healCandidates,
   renderHealthReport,
 } from './flake-analyzer.js';
-import { extractTestResults, type TestResultRow } from './suite-runner.js';
+import { extractTestResults, extractReporterErrors, type TestResultRow } from './suite-runner.js';
 
 const row = (over: Partial<TestResultRow>): TestResultRow => ({
   file: 'tests/a.spec.ts',
@@ -140,6 +140,14 @@ test('flattens nested suites and keeps final attempt', () => {
   assert.equal(rows[0].status, 'passed');
   assert.equal(rows[0].retried, true);
   assert.equal(rows[0].durationMs, 500);
+});
+
+test('extractReporterErrors reads globalSetup failures from JSON root', () => {
+  const errs = extractReporterErrors({
+    suites: [],
+    errors: [{ message: 'locator.fill: value: expected string, got undefined' }],
+  });
+  assert.deepEqual(errs, ['locator.fill: value: expected string, got undefined']);
 });
 
 test('filePrefix re-bases reporter paths to repo-relative', () => {

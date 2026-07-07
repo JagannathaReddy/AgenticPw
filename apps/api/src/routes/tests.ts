@@ -168,8 +168,31 @@ export function registerTestsRoutes(app: FastifyInstance, db: Db): void {
   app.get('/v1/tests', async (request) => {
     return withTenant(db, request.tenant, async (client) => {
       const { rows } = await client.query(
-        `SELECT id, role, status, goal, created_at AS "createdAt", updated_at AS "updatedAt"
-         FROM manifests ORDER BY created_at DESC LIMIT 50`,
+        `SELECT m.id, m.role, m.status, m.goal,
+                m.parent_manifest_id AS "parentManifestId",
+                m.result,
+                m.created_at AS "createdAt", m.updated_at AS "updatedAt",
+                EXTRACT(EPOCH FROM (COALESCE(m.finished_at, now()) - m.started_at))::int AS "durationSec",
+                m.result->>'category' AS category,
+                (m.result->>'autoApplied')::boolean AS "autoApplied",
+                (m.result->'patchedTestPath' IS NOT NULL OR m.result->'files' IS NOT NULL) AS "hasPatch",
+                (m.result->>'alreadyPassing')::boolean AS "alreadyPassing",
+                COALESCE(lc.cost, 0)::float AS "costUSD",
+                fb.verdict AS feedback,
+                fb.note AS "feedbackNote",
+                r.full_name AS "repoName",
+                (m.goal->'params'->>'repoId')::text AS "repoId"
+           FROM manifests m
+           LEFT JOIN repositories r
+             ON r.id = (m.goal->'params'->>'repoId')::uuid
+           LEFT JOIN LATERAL (
+             SELECT SUM(cost_usd) AS cost FROM llm_calls WHERE manifest_id = m.id
+           ) lc ON true
+           LEFT JOIN LATERAL (
+             SELECT verdict, note FROM heal_feedback WHERE manifest_id = m.id
+              ORDER BY (source = 'explicit') DESC, created_at DESC LIMIT 1
+           ) fb ON true
+          ORDER BY m.created_at DESC LIMIT 100`,
       );
       return rows;
     });

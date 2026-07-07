@@ -4,9 +4,10 @@ Describe a test in English → get code in your repo's style. Point it at a
 failing test → get a verified patch, or a categorized refusal. Ask about your
 suite → get a health report that separates flaky from broken — then heal
 everything it flagged in one command, and rate the patches so the next heal
-is smarter. It runs on a laptop and, since v0.7.0, in your CI.
+is smarter. It runs on a laptop and, since v0.7.0, in your CI — with a web console
+(`apps/web`, Next.js) since v0.13.0: `npm run dev`, open http://localhost:3000.
 
-**Release:** `v0.12.0-semantic-rag` · previous tags: `v0.11.0-trust` · `v0.10.0-eval-loop` · `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
+**Release:** `v0.13.0-console` · previous tags: `v0.12.0-semantic-rag` · `v0.11.0-trust` · `v0.10.0-eval-loop` · `v0.9.0-quarantine` · `v0.8.0-steward-ci` · `v0.7.0-ci` · `v0.6.0-feedback` · `v0.5.0-batch` · `v0.4.0-steward` · `v0.3.0-dx` · `v0.2.0-triage` · `v0.1.0-local-q1`
 
 ## What it does
 
@@ -131,6 +132,7 @@ Three design choices worth knowing:
 apps/
   api/                 Fastify HTTP surface + SSE event stream
   worker/              Poll loop dispatching the role workflows
+  web/                 Next.js AgenticPw console (:3000, proxies /v1 → API)
 packages/
   ops-types/           Shared TypeScript: TaskManifest, RepoProfile, LLM contract
   ops-prompts/         Prompt loader (YAML front-matter, fails on unbound vars)
@@ -150,7 +152,7 @@ infra/future/          Terraform for the cloud v1 target — parked
 | Command | What it does |
 |---------|--------------|
 | `npm run dev:up` | Start Postgres, apply migrations, seed dev tenant |
-| `npm run dev` | API (:3001) + worker with tsx watch |
+| `npm run dev` | API (:3001) + worker + web console (:3000) with tsx/next watch |
 | `npm run agent` | The CLI (`add`, `heal`, `improve`, `steward`, `batch`, `apply`, `quarantine`, `feedback`, `init`, `repos`, `list`, `get`, `doctor`, `cost`) |
 | `npm run typecheck` / `npm run build` | Typecheck / compile every workspace |
 | `npm run test:rls` | Cross-tenant isolation tests |
