@@ -13,6 +13,7 @@ import {
 
 export interface PlaywrightSuiteJson {
   stats?: { expected?: number; unexpected?: number; skipped?: number; flaky?: number };
+  errors?: Array<{ message?: string; stack?: string }>;
   suites?: Array<{
     specs?: Array<{
       tests?: Array<{
@@ -79,6 +80,29 @@ export function extractErrorText(json: PlaywrightSuiteJson | null): string {
     }
   }
   return parts.join('\n\n');
+}
+
+export function extractReporterErrors(json: PlaywrightSuiteJson | null): string[] {
+  if (!json?.errors?.length) return [];
+  return json.errors
+    .map((e) => {
+      const msg = (e as { message?: string; stack?: string }).message ??
+        (e as { message?: string; stack?: string }).stack ??
+        '';
+      const line = msg.replace(/\u001b\[[0-9;]*m/g, '').trim().split('\n')[0] ?? '';
+      return line.length > 0 ? enrichPlaywrightError(line) : '';
+    })
+    .filter((s) => s.length > 0);
+}
+
+function enrichPlaywrightError(line: string): string {
+  if (/Executable doesn't exist at .*ms-playwright\/chromium-\d+/.test(line)) {
+    return (
+      `${line} — run \`npx playwright install chromium\` in the target repo ` +
+      `(Playwright version there may differ from browsers installed for other projects).`
+    );
+  }
+  return line;
 }
 
 export interface RunPlaywrightOptions {
@@ -169,6 +193,101 @@ export async function runPlaywright(
         stderr,
         output: `${stdout}\n${stderr}`,
         tracePath,
+      });
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({
+        exitCode: 1,
+        timedOut: false,
+        durationMs: Date.now() - started,
+        json: null,
+        stdout: '',
+        stderr: err.message,
+        output: err.message,
+      });
+    });
+  });
+}
+
+/** Run all tests in a Playwright project (e.g. auth setup projects). */
+export async function runPlaywrightProject(
+  repoRoot: string,
+  projectName: string,
+  timeoutMs: number,
+): Promise<PlaywrightRunResult> {
+  const installHint = await playwrightInstallHint(repoRoot);
+  if (installHint) {
+    return {
+      exitCode: 1,
+      timedOut: false,
+      durationMs: 0,
+      json: null,
+      stdout: '',
+      stderr: installHint,
+      output: installHint,
+    };
+  }
+
+  const pw = await resolvePlaywrightCommand(repoRoot, 'run');
+  const project = resolvePlaywrightProject(projectName);
+
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const args = [
+      ...pw.prefixArgs,
+      '--reporter=json',
+      '--trace=on',
+      '--workers=1',
+      `--project=${project}`,
+    ];
+
+    const proc = spawn(pw.command, args, {
+      cwd: repoRoot,
+      env: { ...process.env, CI: '1' },
+      shell: pw.shell,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let killer: NodeJS.Timeout | null = null;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGTERM');
+      killer = setTimeout(() => proc.kill('SIGKILL'), 5000);
+    }, timeoutMs);
+
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (killer) clearTimeout(killer);
+      let json: PlaywrightSuiteJson | null = null;
+      const jsonStart = stdout.indexOf('{');
+      if (jsonStart >= 0) {
+        try {
+          json = JSON.parse(stdout.slice(jsonStart)) as PlaywrightSuiteJson;
+        } catch {
+          json = null;
+        }
+      }
+      resolve({
+        exitCode: code ?? 1,
+        timedOut,
+        durationMs: Date.now() - started,
+        json,
+        stdout,
+        stderr,
+        output: `${stdout}\n${stderr}`,
+        tracePath: extractTracePath(json),
       });
     });
 

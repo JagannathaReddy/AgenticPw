@@ -175,6 +175,10 @@ export async function runCoverage(
     },
     deps.artifacts,
     deps.config,
+    {
+      repoRoot: repoContext.repoRoot,
+      playwrightProject: repoContext.playwrightProject,
+    },
   );
   log.info(
     {

@@ -5,6 +5,7 @@ import type { ManifestBudget, ManifestPolicy } from '@poc/types';
 import type { Db } from '../db.js';
 import { withTenant } from '../db.js';
 import { insertManifestRows } from '../submit-manifest.js';
+import { listRepoSpecs } from '../list-repo-specs.js';
 
 const registerSchema = z.object({
   name: z.string().min(1),
@@ -93,6 +94,22 @@ export function registerReposRoutes(app: FastifyInstance, db: Db): void {
     });
   });
 
+  app.get<{ Params: { id: string } }>('/v1/repos/:id/specs', async (request, reply) => {
+    return withTenant(db, request.tenant, async (client) => {
+      const { rows } = await client.query<{ local_path: string | null; full_name: string }>(
+        `SELECT local_path, full_name FROM repositories WHERE id = $1`,
+        [request.params.id],
+      );
+      if (rows.length === 0) return reply.code(404).send({ error: 'repo not found' });
+      const localPath = rows[0].local_path;
+      if (!localPath) {
+        return reply.code(400).send({ error: 'repo has no local_path — cannot list specs' });
+      }
+      const specs = await listRepoSpecs(localPath);
+      return { repoId: request.params.id, repoName: rows[0].full_name, specs };
+    });
+  });
+
   app.post<{ Params: { id: string } }>(
     '/v1/repos/:id/onboard',
     async (request, reply) => {
@@ -124,6 +141,46 @@ export function registerReposRoutes(app: FastifyInstance, db: Db): void {
           budget: DEFAULT_BUDGET,
           policy: DEFAULT_POLICY,
           successGate: { verifier: 'reviewer', criteria: ['profile parses'] },
+          eventInput: { repoId, localPath },
+        });
+
+        return reply.code(202).send({
+          ...submitted,
+          repoId,
+          status: 'pending',
+        });
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/v1/repos/:id/auth-bootstrap',
+    async (request, reply) => {
+      const repoId = request.params.id;
+
+      return withTenant(db, request.tenant, async (client) => {
+        const { rows } = await client.query<{ local_path: string | null; full_name: string }>(
+          `SELECT local_path, full_name FROM repositories WHERE id = $1`,
+          [repoId],
+        );
+        if (rows.length === 0) return reply.code(404).send({ error: 'repo not found' });
+        const localPath = rows[0].local_path;
+        if (!localPath) {
+          return reply
+            .code(400)
+            .send({ error: 'repo has no local_path — cannot run auth bootstrap' });
+        }
+
+        const submitted = await insertManifestRows(client, request.tenant, request.userId, {
+          role: 'onboarding',
+          goal: {
+            kind: 'auth_bootstrap',
+            description: `Run Playwright auth setup for ${rows[0].full_name}`,
+            params: { repoId, localPath },
+          },
+          budget: { ...DEFAULT_BUDGET, maxDurationSec: 600, maxCostUSD: 0 },
+          policy: DEFAULT_POLICY,
+          successGate: { verifier: 'reviewer', criteria: ['storage states exist'] },
           eventInput: { repoId, localPath },
         });
 

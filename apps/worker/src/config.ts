@@ -25,6 +25,7 @@ export interface WorkerConfig {
    * chain (e.g. auth-setup → chromium).
    */
   playwrightProject: string;
+  notifyWebhookUrl: string;
 }
 
 function req(name: string, fallback?: string): string {
@@ -89,5 +90,6 @@ export function loadConfig(): WorkerConfig {
     testTimeoutMs: Number(process.env.TEST_TIMEOUT_MS ?? 120_000),
     suiteTimeoutMs: Number(process.env.SUITE_TIMEOUT_MS ?? 600_000),
     playwrightProject: process.env.PLAYWRIGHT_PROJECT ?? '',
+    notifyWebhookUrl: process.env.NOTIFY_WEBHOOK_URL ?? '',
   };
 }

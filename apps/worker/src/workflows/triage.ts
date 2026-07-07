@@ -16,7 +16,15 @@ import {
 } from '../activities/stack-sources.js';
 import { FsCache } from '../cache.js';
 import { withTenant, type Tenant } from '../db.js';
-import { guessPageObjectPath, loadRepoContext } from '../repo-context.js';
+import { guessPageObjectPath, inferPageObjectPath, loadRepoContext } from '../repo-context.js';
+import { envSetupFixHint } from '../env-setup.js';
+import { runUtilityGenerator } from '../activities/utility-generator.js';
+import {
+  patchPageObjectRel,
+  patchSpecRel,
+  resolvePatchWorkspace,
+  type PatchNamespace,
+} from '../assignment-workspace.js';
 import { BudgetExceededError, canAutoApply, shouldRefuse } from '../policy.js';
 import { manifestLogger } from '../logger.js';
 import {
@@ -39,6 +47,8 @@ export interface TriageManifestRow {
       pageObjectPath?: string | null;
       includeGlobs?: string[] | null;
       autoApply?: boolean | null;
+      patchNamespace?: PatchNamespace | null;
+      patchScopeId?: string | null;
     };
   };
   policy?: { refuseCategories?: string[]; trustRung?: number } | null;
@@ -88,7 +98,46 @@ export async function runTriage(
   log.info({ stage: 'started', testPath: rawTestPath, repoRoot: repo.repoRoot }, 'Triage started');
 
   const testPath = rawTestPath;
-  const pageObjectPath = rawPagePath ?? (await guessPageObjectPath(repo.repoRoot, testPath));
+  const originalPageObjectPath = rawPagePath ?? (await guessPageObjectPath(repo.repoRoot, testPath));
+  const canonicalPageObjectPath = originalPageObjectPath ?? inferPageObjectPath(testPath);
+  const patchWorkspace = resolvePatchWorkspace({
+    manifestId: manifest.id,
+    patchNamespace: manifest.goal.params.patchNamespace,
+    patchScopeId: manifest.goal.params.patchScopeId,
+  });
+
+  let pageObjectPath = originalPageObjectPath;
+  if (!pageObjectPath) {
+    log.info({ stage: 'utility_generate' }, 'No page object found — generating utility');
+    const generated = await runUtilityGenerator(
+      {
+        manifestId: manifest.id,
+        correlationId: manifest.audit.correlationId,
+        repoRoot: repo.repoRoot,
+        testPath,
+        repoProfile: repo.repoProfile,
+        patchDirRel: patchWorkspace.patchDirRel,
+      },
+      deps.artifacts,
+      deps.config,
+      deps.pool,
+      tenant,
+    );
+    if (generated) {
+      pageObjectPath = generated.pageObjectPath;
+      await withTenant(deps.pool, tenant, async (client) => {
+        await appendEvent(client, manifest, 'progress', null, null, {
+          stage: 'utility_generated',
+          pageObjectPath: generated.pageObjectPath,
+          costUSD: generated.usage.costUSD,
+        });
+      });
+      log.info(
+        { stage: 'utility_generated', pageObjectPath: generated.pageObjectPath },
+        'Generated missing page object',
+      );
+    }
+  }
 
   const resolvedProject = repo.playwrightProject;
 
@@ -212,9 +261,13 @@ export async function runTriage(
     });
   }
   if (!classification.isSafeToHeal) {
+    const reason =
+      classification.category === 'env_setup_required'
+        ? `${classification.summary} ${envSetupFixHint()}`
+        : `Refuse-to-heal: ${classification.summary}`;
     return terminate(deps.pool, tenant, manifest, 'rejected', {
       category: classification.category,
-      reason: `Refuse-to-heal: ${classification.summary}`,
+      reason,
     });
   }
 
@@ -405,12 +458,9 @@ export async function runTriage(
   }
 
   // ── 6. Write patched files to a manifest-scoped subdir ────────────────
-  const shortId = manifest.id.slice(0, 8);
-  const patchDir = path.join('tests', 'triaged', shortId);
-  const patchedSpecRel = path.join(patchDir, path.basename(heal.parse.files.test.path));
-  const patchedPageRel = path.join(
-    patchDir,
-    'pages',
+  const patchedSpecRel = patchSpecRel(patchWorkspace, path.basename(heal.parse.files.test.path));
+  const patchedPageRel = patchPageObjectRel(
+    patchWorkspace,
     path.basename(heal.parse.files.pageObject.path),
   );
 
@@ -463,9 +513,10 @@ export async function runTriage(
     let autoApplied = false;
     if (canAutoApply(manifest.policy as never, manifest.goal.params)) {
       await fs.copyFile(specAbs, path.join(repo.repoRoot, testPath));
-      if (pageObjectPath) {
+      const applyPagePath = originalPageObjectPath ?? canonicalPageObjectPath;
+      if (applyPagePath) {
         await fs
-          .copyFile(pageAbs, path.join(repo.repoRoot, pageObjectPath))
+          .copyFile(pageAbs, path.join(repo.repoRoot, applyPagePath))
           .catch(() => undefined);
       }
       await withTenant(deps.pool, tenant, async (client) => {

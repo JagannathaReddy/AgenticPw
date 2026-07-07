@@ -67,15 +67,23 @@ export async function loadRepoContext(
   });
 }
 
+function pageObjectCandidates(specPath: string): string[] {
+  const dir = path.dirname(specPath);
+  const base = path.basename(specPath).replace(/\.spec\.(tsx?)$/, '.page.$1');
+  return [path.join(dir, 'pages', base), path.join(dir, base)];
+}
+
+/** Preferred path when the POM does not exist yet (utility generator target). */
+export function inferPageObjectPath(specPath: string): string {
+  return pageObjectCandidates(specPath)[0];
+}
+
 /** Sibling `pages/<name>.page.ts` (or same-dir) guess used by triage + improve. */
 export async function guessPageObjectPath(
   repoRoot: string,
   specPath: string,
 ): Promise<string | null> {
-  const dir = path.dirname(specPath);
-  const base = path.basename(specPath).replace(/\.spec\.(tsx?)$/, '.page.$1');
-  const candidates = [path.join(dir, 'pages', base), path.join(dir, base)];
-  for (const rel of candidates) {
+  for (const rel of pageObjectCandidates(specPath)) {
     try {
       await fs.access(path.join(repoRoot, rel));
       return rel;

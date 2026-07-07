@@ -10,6 +10,10 @@ export type ManifestRole =
   | 'coverage'
   | 'triage'
   | 'steward'
+  | 'teammate'
+  | 'onboarding'
+  | 'improver'
+  | 'quarantiner'
   | 'explorer'
   | 'generator'
   | 'healer'
@@ -35,11 +39,17 @@ export type TrustRung = 1 | 2 | 3 | 4 | 5;
 export type ManifestGoalKind =
   | 'add_test'
   | 'onboard_repo'
+  | 'auth_bootstrap'
   | 'explore_flow'
   | 'generate_code'
   | 'judge_test'
   | 'heal_test'
-  | 'classify_failure';
+  | 'classify_failure'
+  | 'teammate_assignment'
+  | 'suite_health'
+  | 'batch_heal'
+  | 'quarantine_flaky'
+  | 'improve_test';
 
 export interface ManifestGoal {
   kind: ManifestGoalKind;
@@ -80,6 +90,7 @@ export type RefusalCategory =
   | 'ambiguous_fix'
   | 'over_budget'
   | 'infra'
+  | 'env_setup_required'
   | 'out_of_scope'
   | 'unknown';
 

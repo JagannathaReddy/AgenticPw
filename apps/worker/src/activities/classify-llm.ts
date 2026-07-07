@@ -25,6 +25,7 @@ const CATEGORIES: readonly FailureCategory[] = [
   'timing',
   'assertion_broken',
   'product_bug',
+  'env_setup_required',
   'infra',
   'unknown',
 ];

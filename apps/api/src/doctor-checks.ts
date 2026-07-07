@@ -69,7 +69,7 @@ export async function runDoctorChecks(apiBase: string): Promise<DoctorCheck[]> {
     }),
     check('Migrations applied', async () => {
       const q =
-        "SELECT to_regclass('manifests') IS NOT NULL AS manifests, to_regclass('llm_calls') IS NOT NULL AS llm_calls;";
+        "SELECT to_regclass('manifests') IS NOT NULL AS manifests, to_regclass('llm_calls') IS NOT NULL AS llm_calls, to_regclass('qa_assignments') IS NOT NULL AS qa_assignments;";
       const p = spawnSync(
         'docker',
         ['exec', 'test-agent-postgres', 'psql', '-U', 'platform', '-d', 'platform', '-tAc', q],
@@ -77,11 +77,13 @@ export async function runDoctorChecks(apiBase: string): Promise<DoctorCheck[]> {
       );
       if (p.status !== 0) return { ok: false, detail: 'could not query Postgres', fixHint: 'Check postgres container' };
       const line = p.stdout.trim();
-      const ok = line.includes('t|t');
+      const ok = line.includes('t|t|t');
       return {
         ok,
-        detail: ok ? 'core tables present (manifests, llm_calls)' : `some tables missing (${line})`,
-        fixHint: ok ? undefined : 'Run: bash scripts/db-migrate.sh',
+        detail: ok
+          ? 'core tables present (manifests, llm_calls, qa_assignments)'
+          : `some tables missing (${line})`,
+        fixHint: ok ? undefined : 'Run: npm run db:migrate',
       };
     }),
     check('Dev tenant seeded', async () => {

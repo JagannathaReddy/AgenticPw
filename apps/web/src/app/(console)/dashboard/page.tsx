@@ -11,11 +11,15 @@ export default function DashboardPage() {
   const repos = useConsoleStore((s) => s.repos);
   const costs = useConsoleStore((s) => s.costs);
   const settings = useConsoleStore((s) => s.settings);
+  const teammateSummary = useConsoleStore((s) => s.teammateSummary);
 
   const rows = buildRows(manifests);
   const repoRows = buildRepoRows(repos, rows, stewardReportsFromManifests(manifests));
   const summary = dashboardSummary(manifests, repoRows, costs ?? undefined);
   const recent = recentRows(rows);
+
+  const needsAttention = teammateSummary?.needsAttention ?? [];
+  const activeTeammate = teammateSummary?.activeCount ?? 0;
 
   const doctorOk = settings?.checks.every((c) => c.ok) ?? false;
   const costPoints =
@@ -91,6 +95,42 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {(needsAttention.length > 0 || activeTeammate > 0) && (
+        <div
+          onClick={() => router.push("/teammate")}
+          className="bg-white border border-[#FDE68A] rounded-xl py-4 px-5 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <div className="text-[12.5px] font-bold text-[#92400E] uppercase tracking-wide">
+              Needs your attention
+            </div>
+            {activeTeammate > 0 && (
+              <span className="text-[11px] font-semibold text-[#6B7280]">
+                · {activeTeammate} active assignment{activeTeammate === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {needsAttention.length === 0 ? (
+            <div className="text-[13px] text-[#6B7280]">Teammate is working — no escalations yet.</div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {needsAttention.slice(0, 3).map((a) => {
+                const esc = a.escalation as { category?: string; reason?: string } | null;
+                return (
+                  <div key={a.id} className="flex items-start gap-3 text-[13px]">
+                    <span className="font-semibold shrink-0">{a.repoName}</span>
+                    <span className="text-[#6B7280] flex-1 truncate">{a.title}</span>
+                    <span className="text-[#92400E] text-[12px] shrink-0 max-w-[240px] truncate">
+                      {esc?.category ?? a.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div

@@ -1,14 +1,5 @@
-# Sprint 4: weekly steward suite-health report in CI.
-#
-# Runs the whole Playwright suite N times on the runner, separates flaky
-# from broken, and puts the health report in the job summary. Heal
-# candidates come out as ::warning annotations plus a `steward-id` output —
-# feed it to `agent batch --from-steward` (locally or in a follow-up job)
-# to fix everything it flagged.
-#
-# Never fails the job: an unhealthy suite is a report, not a CI failure.
-# Secret handling identical to heal-on-failure.yml; see
-# docs/guides/SECURITY-CI.md.
+# Sprint 4: weekly suite health (legacy steward-only action).
+# Prefer teammate-regression.yml for the full closed loop (Phase 5).
 
 name: suite-health
 

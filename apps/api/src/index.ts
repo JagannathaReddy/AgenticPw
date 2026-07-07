@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { devAuthHook } from './auth.js';
+import { registerAssignmentsRoutes, registerWebhookRoutes } from './routes/assignments.js';
 import { registerBatchesRoutes } from './routes/batches.js';
 import { registerConsoleDataRoutes } from './routes/console-data.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
@@ -12,6 +13,7 @@ import { registerImprovesRoutes } from './routes/improves.js';
 import { registerQuarantinesRoutes } from './routes/quarantines.js';
 import { registerReposRoutes } from './routes/repos.js';
 import { registerStewardsRoutes } from './routes/stewards.js';
+import { registerTeammateStateRoutes } from './routes/teammate-state.js';
 import { registerTestsRoutes } from './routes/tests.js';
 
 async function main(): Promise<void> {
@@ -32,6 +34,9 @@ async function main(): Promise<void> {
   registerBatchesRoutes(app, db);
   registerFeedbackRoutes(app, db);
   registerQuarantinesRoutes(app, db);
+  registerAssignmentsRoutes(app, db);
+  registerWebhookRoutes(app, db);
+  registerTeammateStateRoutes(app, db);
   registerConsoleDataRoutes(app, db);
 
   const shutdown = async (signal: string) => {

@@ -76,6 +76,84 @@ export interface StewardReport {
   };
 }
 
+export interface QaAssignment {
+  id: string;
+  manifest_id: string;
+  repo_id: string;
+  assignment_type: string;
+  title: string;
+  status: string;
+  source: string;
+  escalation?: Record<string, unknown> | null;
+  loop_state?: Record<string, unknown>;
+  manifest_status?: string;
+  manifest_result?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface LoopReadinessCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+  fixHint?: string;
+}
+
+export interface TeammateRepoState {
+  repoId: string;
+  repoName: string;
+  loopReadiness: {
+    score: number;
+    label: 'ready' | 'partial' | 'blocked';
+    checks: LoopReadinessCheck[];
+  };
+  lastSteward: {
+    manifestId: string;
+    finishedAt: string;
+    healthy: number;
+    flaky: number;
+    alwaysFailing: number;
+    healCandidates: number;
+    envSetupFailures: number;
+  } | null;
+  activeAssignments: Array<{
+    id: string;
+    manifestId: string;
+    title: string;
+    assignmentType: string;
+    status: string;
+    escalation?: Record<string, unknown> | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  needsAttention: TeammateRepoState['activeAssignments'];
+  recentAssignments: TeammateRepoState['activeAssignments'];
+  feedback: {
+    total: number;
+    ups: number;
+    downs: number;
+    acceptRate: number | null;
+    byCategory: Array<{ category: string; ups: number; downs: number; total: number }>;
+  };
+}
+
+export interface TeammateSummary {
+  needsAttention: Array<{
+    id: string;
+    manifestId: string;
+    repoId: string;
+    repoName: string;
+    title: string;
+    assignmentType: string;
+    status: string;
+    escalation?: Record<string, unknown> | null;
+    createdAt: string;
+  }>;
+  activeCount: number;
+}
+
 export interface WizardForm {
   goal: string;
   url: string;

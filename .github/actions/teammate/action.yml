@@ -1,0 +1,166 @@
+# Teammate closed-loop assignments in CI (Phase 5)
+#
+# Replaces disconnected steward/batch steps with a single teammate assignment.
+# Never fails the job — escalations are reports, not CI gates.
+
+name: test-agent teammate
+description: Submit a teammate assignment and optionally wait for the closed-loop report
+inputs:
+  openai-api-key:
+    description: LLM key
+    required: true
+  assignment-type:
+    description: regression | health_check | fix_failure
+    required: false
+    default: regression
+  test-path:
+    description: Required for fix_failure
+    required: false
+    default: ''
+  repo-name:
+    description: Name to register the checkout under
+    required: false
+    default: ci-repo
+  steward-runs:
+    description: Steward runs for regression / health_check
+    required: false
+    default: '3'
+  wait:
+    description: Wait for assignment to complete (true/false)
+    required: false
+    default: 'true'
+  skip-if-active:
+    description: Skip when same assignment type is already active
+    required: false
+    default: 'true'
+  source:
+    description: Assignment source (ci | schedule)
+    required: false
+    default: ci
+outputs:
+  assignment-id:
+    description: qa_assignments.id
+    value: ${{ steps.assign.outputs.assignment-id }}
+  manifest-id:
+    description: Teammate manifest id
+    value: ${{ steps.assign.outputs.manifest-id }}
+  report-status:
+    description: done | partial | escalated
+    value: ${{ steps.assign.outputs.report-status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install + build
+      shell: bash
+      run: |
+        npm ci
+        npm run build
+        npx playwright install chromium --with-deps
+
+    - name: Start Postgres + migrate + seed
+      shell: bash
+      run: |
+        docker compose up -d postgres
+        bash scripts/db-wait-for-postgres.sh
+        bash scripts/db-migrate.sh
+        npx tsx scripts/db-seed-dev-tenant.ts
+
+    - name: Start API + worker
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        NOTIFY_WEBHOOK_URL: ${{ env.NOTIFY_WEBHOOK_URL }}
+        API_PORT: '3001'
+        NO_CACHE: '1'
+      run: |
+        node apps/api/dist/index.js  > /tmp/test-agent-api.log 2>&1 &
+        node apps/worker/dist/index.js > /tmp/test-agent-worker.log 2>&1 &
+        for i in $(seq 1 30); do
+          curl -sf http://127.0.0.1:3001/v1/health > /dev/null && break
+          sleep 1
+        done
+        curl -sf http://127.0.0.1:3001/v1/health
+
+    - name: Register checkout
+      shell: bash
+      env:
+        TEST_AGENT_API: 'http://127.0.0.1:3001'
+      run: |
+        npx tsx scripts/test-agent.ts init . --name '${{ inputs.repo-name }}'
+
+    - name: Submit teammate assignment
+      id: assign
+      shell: bash
+      env:
+        TEST_AGENT_API: 'http://127.0.0.1:3001'
+        ASSIGNMENT_TYPE: ${{ inputs.assignment-type }}
+        TEST_PATH: ${{ inputs.test-path }}
+        STEWARD_RUNS: ${{ inputs.steward-runs }}
+        ASSIGN_SOURCE: ${{ inputs.source }}
+        SKIP_IF_ACTIVE: ${{ inputs.skip-if-active }}
+        WAIT: ${{ inputs.wait }}
+      run: |
+        REPO_ID=$(npx tsx scripts/test-agent.ts repos | awk 'NR==1 {print $1}')
+        EXTRA=(--repo "$REPO_ID" --source "$ASSIGN_SOURCE")
+        if [ "$SKIP_IF_ACTIVE" = 'true' ]; then EXTRA+=(--skip-if-active); fi
+        if [ "$WAIT" != 'true' ]; then EXTRA+=(--no-wait); fi
+
+        case "$ASSIGNMENT_TYPE" in
+          regression)
+            EXTRA+=(--regression --runs "$STEWARD_RUNS")
+            ;;
+          health_check)
+            EXTRA+=(--health --runs "$STEWARD_RUNS")
+            ;;
+          fix_failure)
+            if [ -z "$TEST_PATH" ]; then
+              echo '::error::fix_failure requires test-path input'
+              exit 1
+            fi
+            EXTRA+=(--fix "$TEST_PATH")
+            ;;
+          *)
+            echo '::error::Unknown assignment-type'
+            exit 1
+            ;;
+        esac
+
+        # Swallow exit — unhealthy suite / escalation is a report, not a CI failure.
+        OUT=$(npx tsx scripts/test-agent.ts assign "${EXTRA[@]}" 2>&1) || true
+        echo "$OUT"
+
+        MANIFEST_ID=$(grep -oE 'manifestId:\s+[0-9a-f-]{36}' <<< "$OUT" | awk '{print $2}')
+        ASSIGN_ID=$(grep -oE 'assignmentId:\s+[0-9a-f-]{36}' <<< "$OUT" | awk '{print $2}')
+        echo "manifest-id=${MANIFEST_ID:-}" >> "$GITHUB_OUTPUT"
+        echo "assignment-id=${ASSIGN_ID:-}" >> "$GITHUB_OUTPUT"
+
+        if [ -n "$ASSIGN_ID" ]; then
+          REPORT=$(curl -sf "http://127.0.0.1:3001/v1/assignments/$ASSIGN_ID/report" 2>/dev/null || echo '{}')
+          STATUS=$(node -e "try{const j=JSON.parse(process.argv[1]);console.log(j.status||'')}catch{}" "$REPORT")
+          SUMMARY=$(node -e "try{const j=JSON.parse(process.argv[1]);console.log(j.summary||'')}catch{}" "$REPORT")
+          echo "report-status=${STATUS:-}" >> "$GITHUB_OUTPUT"
+          if [ -n "$STATUS" ]; then
+            {
+              echo '## Teammate report'
+              echo ''
+              echo "- assignment: \`${ASSIGN_ID}\`"
+              echo "- manifest: \`${MANIFEST_ID}\`"
+              echo "- status: **${STATUS}**"
+              echo "- summary: ${SUMMARY}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+        else
+          echo 'report-status=' >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Surface service logs on failure
+      if: failure()
+      shell: bash
+      run: |
+        echo '::group::api.log'
+        tail -100 /tmp/test-agent-api.log || true
+        echo '::endgroup::'
+        echo '::group::worker.log'
+        tail -100 /tmp/test-agent-worker.log || true
+        echo '::endgroup::'

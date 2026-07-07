@@ -12,6 +12,7 @@ export type FailureCategory =
   | 'timing'
   | 'assertion_broken'
   | 'product_bug'
+  | 'env_setup_required'
   | 'infra'
   | 'unknown';
 
@@ -36,6 +37,18 @@ interface Rule {
 
 // Order matters: earlier rules win. Put highest-signal patterns first.
 const RULES: readonly Rule[] = [
+  // ── env setup: auth / storage state — escalate, do not heal ───────────
+  {
+    category: 'env_setup_required',
+    pattern: /storageState|globalSetup|global setup|auth\.setup|\.auth\/|ENOENT.*\.json/i,
+    summary: () => 'Playwright auth or storage state is missing — run auth setup before healing.',
+  },
+  {
+    category: 'env_setup_required',
+    pattern: /Executable doesn't exist at .*ms-playwright/i,
+    summary: () => 'Playwright browsers are not installed for this repo.',
+  },
+
   // ── infra: nothing to heal ──────────────────────────────────────────────
   {
     category: 'infra',

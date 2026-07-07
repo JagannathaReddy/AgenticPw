@@ -1,0 +1,46 @@
+# CI: assign fix_failure when PR touches tests (optional path — dry-run teammate loop).
+# For full suite QA use teammate-regression.yml (scheduled).
+
+name: teammate-ci-fix
+
+on:
+  pull_request:
+    paths:
+      - 'tests/**'
+  workflow_dispatch:
+    inputs:
+      test-path:
+        description: Spec to assign for heal
+        required: true
+        default: 'tests/example.spec.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: teammate-fix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+
+jobs:
+  assign-fix:
+    runs-on: ubuntu-latest
+    if: >-
+      env.HAS_KEY == 'true' && (
+        github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+      )
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Teammate fix assignment
+        uses: ./.github/actions/teammate
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          assignment-type: fix_failure
+          test-path: ${{ github.event.inputs.test-path || 'tests/**/*.spec.ts' }}
+          source: ci
+          wait: 'true'

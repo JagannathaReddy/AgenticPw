@@ -15,12 +15,17 @@ import { runSteward } from './workflows/steward.js';
 import type { BatchManifestRow } from './workflows/batch.js';
 import { runBatch } from './workflows/batch.js';
 import { runQuarantine, type QuarantineManifestRow } from './workflows/quarantine.js';
+import { runTeammate, type TeammateManifestRow } from './workflows/teammate.js';
+import {
+  runAuthBootstrapWorkflow,
+  type AuthBootstrapManifestRow,
+} from './workflows/auth-bootstrap.js';
 
 const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
 interface ClaimedManifest {
   id: string;
-  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator' | 'quarantiner';
+  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator' | 'quarantiner' | 'teammate';
   org_id: string;
   workspace_id: string;
   goal: unknown;
@@ -33,7 +38,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
     const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator', 'quarantiner')
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator', 'quarantiner', 'teammate')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -114,11 +119,20 @@ async function main(): Promise<void> {
           config,
         });
       } else if (claim.role === 'onboarding') {
-        result = await runOnboardingWorkflow(claim as unknown as OnboardingManifestRow, {
-          pool,
-          artifacts,
-          config,
-        });
+        const goal = claim.goal as { kind?: string };
+        if (goal.kind === 'auth_bootstrap') {
+          result = await runAuthBootstrapWorkflow(claim as unknown as AuthBootstrapManifestRow, {
+            pool,
+            artifacts,
+            config,
+          });
+        } else {
+          result = await runOnboardingWorkflow(claim as unknown as OnboardingManifestRow, {
+            pool,
+            artifacts,
+            config,
+          });
+        }
       } else if (claim.role === 'improver') {
         result = await runImprove(claim as unknown as ImproveManifestRow, {
           pool,
@@ -139,6 +153,12 @@ async function main(): Promise<void> {
         });
       } else if (claim.role === 'orchestrator') {
         result = await runBatch(claim as unknown as BatchManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else if (claim.role === 'teammate') {
+        result = await runTeammate(claim as unknown as TeammateManifestRow, {
           pool,
           artifacts,
           config,

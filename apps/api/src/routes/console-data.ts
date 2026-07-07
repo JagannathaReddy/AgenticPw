@@ -190,6 +190,8 @@ export function registerConsoleDataRoutes(app: FastifyInstance, db: Db): void {
           { name: 'OPENAI_API_KEY', set: !!process.env.OPENAI_API_KEY },
           { name: 'ANTHROPIC_API_KEY', set: !!process.env.ANTHROPIC_API_KEY },
           { name: 'LLM_MODEL', set: !!process.env.LLM_MODEL, value: process.env.LLM_MODEL ?? '(auto)' },
+          { name: 'NOTIFY_WEBHOOK_URL', set: !!process.env.NOTIFY_WEBHOOK_URL },
+          { name: 'WEBHOOK_SECRET', set: !!process.env.WEBHOOK_SECRET },
           { name: 'PLAYWRIGHT_PROJECT', set: !!process.env.PLAYWRIGHT_PROJECT, value: process.env.PLAYWRIGHT_PROJECT ?? '(default)' },
         ],
         checks: doctorChecks.map((c) => ({

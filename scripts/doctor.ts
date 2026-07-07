@@ -77,15 +77,18 @@ async function checkPostgres(): Promise<Omit<CheckResult, 'name'>> {
 }
 
 async function checkMigrations(): Promise<Omit<CheckResult, 'name'>> {
-  const q = 'SELECT to_regclass(\'manifests\') IS NOT NULL AS manifests, to_regclass(\'llm_calls\') IS NOT NULL AS llm_calls;';
+  const q =
+    "SELECT to_regclass('manifests') IS NOT NULL AS manifests, to_regclass('llm_calls') IS NOT NULL AS llm_calls, to_regclass('qa_assignments') IS NOT NULL AS qa_assignments;";
   const p = spawnSync('docker', ['exec', 'test-agent-postgres', 'psql', '-U', 'platform', '-d', 'platform', '-tAc', q], { encoding: 'utf8' });
   if (p.status !== 0) return { ok: false, detail: 'could not query Postgres', fixHint: 'Check postgres container' };
   const line = p.stdout.trim();
-  const ok = line.includes('t|t');
+  const ok = line.includes('t|t|t');
   return {
     ok,
-    detail: ok ? 'core tables present (manifests, llm_calls)' : `some tables missing (${line})`,
-    fixHint: ok ? undefined : 'Run: bash scripts/db-migrate.sh',
+    detail: ok
+      ? 'core tables present (manifests, llm_calls, qa_assignments)'
+      : `some tables missing (${line})`,
+    fixHint: ok ? undefined : 'Run: npm run db:migrate',
   };
 }
 
@@ -188,7 +191,17 @@ async function checkArtifactsDir(): Promise<Omit<CheckResult, 'name'>> {
   }
 }
 
-export async function runDoctor(): Promise<number> {
+export async function runDoctor(argv: string[] = []): Promise<number> {
+  let repoRef: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--help' || a === '-h') {
+      process.stdout.write('agent doctor [--repo <shortId|uuid>]\n');
+      return 0;
+    }
+  }
+
   process.stdout.write('agent doctor — checking environment\n\n');
 
   const checks: Array<Promise<CheckResult>> = [
@@ -217,18 +230,82 @@ export async function runDoctor(): Promise<number> {
   process.stdout.write('\n');
   if (failed === 0) {
     process.stdout.write('All good.\n');
-    return 0;
+  } else {
+    process.stdout.write(`${failed} problem${failed === 1 ? '' : 's'}:\n`);
+    for (const r of results) {
+      if (r.ok || !r.fixHint) continue;
+      process.stdout.write(`  → ${r.name}: ${r.fixHint}\n`);
+    }
   }
 
-  process.stdout.write(`${failed} problem${failed === 1 ? '' : 's'}:\n`);
-  for (const r of results) {
-    if (r.ok || !r.fixHint) continue;
-    process.stdout.write(`  → ${r.name}: ${r.fixHint}\n`);
+  let loopFailed = 0;
+  if (repoRef) {
+    loopFailed = await printLoopReadiness(repoRef, results.find((r) => r.name === 'API responding')?.ok ?? false);
   }
+
+  if (failed === 0 && loopFailed === 0) return 0;
+  if (failed > 0 && loopFailed === 0) return 1;
+  if (failed === 0 && loopFailed > 0) return 1;
   return 1;
+}
+
+async function printLoopReadiness(repoRef: string, apiOk: boolean): Promise<number> {
+  process.stdout.write('\nLoop readiness\n\n');
+  if (!apiOk) {
+    process.stdout.write('✗ Skipped — API not responding (start npm run dev)\n');
+    return 1;
+  }
+
+  try {
+    const reposRes = await fetchWithTimeout(`${API_BASE}/v1/repos`, 3000);
+    if (!reposRes.ok) {
+      process.stdout.write(`✗ Could not list repos (${reposRes.status})\n`);
+      return 1;
+    }
+    const repos = (await reposRes.json()) as Array<{ id: string; name: string }>;
+    const needle = repoRef.toLowerCase();
+    const repo =
+      repos.find((r) => r.id === repoRef) ??
+      repos.find((r) => r.id.startsWith(repoRef)) ??
+      repos.find((r) => r.name.toLowerCase() === needle);
+    if (!repo) {
+      process.stdout.write(`✗ Repo not found: ${repoRef}\n`);
+      return 1;
+    }
+
+    const stateRes = await fetchWithTimeout(`${API_BASE}/v1/repos/${repo.id}/teammate`, 5000);
+    if (!stateRes.ok) {
+      process.stdout.write(`✗ Teammate state unavailable (${stateRes.status})\n`);
+      return 1;
+    }
+    const state = (await stateRes.json()) as {
+      repoName: string;
+      loopReadiness: { score: number; label: string; checks: Array<{ label: string; ok: boolean; detail: string; fixHint?: string }> };
+    };
+
+    process.stdout.write(`${state.repoName} — ${state.loopReadiness.score}% (${state.loopReadiness.label})\n\n`);
+    let failed = 0;
+    const nameWidth = Math.max(...state.loopReadiness.checks.map((c) => c.label.length), 12);
+    for (const c of state.loopReadiness.checks) {
+      const icon = c.ok ? '✓' : '✗';
+      process.stdout.write(`${icon} ${c.label.padEnd(nameWidth)}  ${c.detail}\n`);
+      if (!c.ok) failed++;
+    }
+    if (failed > 0) {
+      process.stdout.write('\nLoop readiness fixes:\n');
+      for (const c of state.loopReadiness.checks) {
+        if (c.ok || !c.fixHint) continue;
+        process.stdout.write(`  → ${c.label}: ${c.fixHint}\n`);
+      }
+    }
+    return failed > 0 ? 1 : 0;
+  } catch (err) {
+    process.stdout.write(`✗ Loop readiness check failed: ${(err as Error).message.slice(0, 100)}\n`);
+    return 1;
+  }
 }
 
 // Only run when executed directly (not when imported by test-agent.ts).
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runDoctor().then((code) => process.exit(code));
+  runDoctor(process.argv.slice(2)).then((code) => process.exit(code));
 }

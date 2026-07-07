@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ensureTeammateCapabilities, teammateApiError } from '@/lib/api';
 import { mapApiManifests, type ApiManifestRow } from '@/lib/mapManifest';
 import type {
   CostBreakdown,
@@ -8,9 +8,12 @@ import type {
   Filters,
   Manifest,
   PromoteResult,
+  QaAssignment,
   RegisteredRepo,
   RepoProfile,
   SettingsSnapshot,
+  TeammateRepoState,
+  TeammateSummary,
   WizardForm,
   FeedbackDir,
 } from '@/lib/types';
@@ -78,6 +81,25 @@ interface ConsoleState {
   runBatchFromSteward: (stewardManifestId: string, repoId: string, maxCost?: number) => Promise<string>;
   submitQuarantine: (fromManifestId: string, repoId?: string, autoApply?: boolean) => Promise<string>;
 
+  assignments: QaAssignment[];
+  teammateSummary: TeammateSummary | null;
+  teammateStateByRepo: Record<string, TeammateRepoState>;
+  refreshAssignments: (repoId?: string, status?: string) => Promise<void>;
+  fetchTeammateState: (repoId: string) => Promise<TeammateRepoState>;
+  refreshTeammateSummary: () => Promise<void>;
+  submitFixAssignment: (repoId: string, testPath: string, opts?: { autoApply?: boolean; maxHealAttempts?: number }) => Promise<string>;
+  submitStoryAssignment: (
+    repoId: string,
+    targetUrl: string,
+    expectedOutcomes: string[],
+    opts?: { goal?: string; maxSteps?: number; autoApply?: boolean; maxHealAttempts?: number },
+  ) => Promise<string>;
+  submitRegressionAssignment: (
+    repoId: string,
+    opts?: { stewardRuns?: number; quarantineFlaky?: boolean; autoApply?: boolean },
+  ) => Promise<string>;
+  cancelAssignment: (id: string) => Promise<void>;
+
   applyManifest: (id: string) => Promise<void>;
   applyBatchAll: (batchId: string) => Promise<{ applied: number; total: number }>;
   rejectManifest: (id: string, note?: string) => Promise<void>;
@@ -110,6 +132,109 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
   preflightChecked: false,
   preflightBlocked: false,
 
+  assignments: [],
+  teammateSummary: null,
+  teammateStateByRepo: {},
+
+  refreshTeammateSummary: async () => {
+    const capErr = await ensureTeammateCapabilities();
+    if (capErr) {
+      set({ apiError: capErr });
+      return;
+    }
+    try {
+      const summary = await apiFetch<TeammateSummary>('/v1/teammate/summary');
+      set({ teammateSummary: summary, apiError: null });
+    } catch (err) {
+      set({ apiError: teammateApiError(err) });
+    }
+  },
+
+  fetchTeammateState: async (repoId) => {
+    const state = await apiFetch<TeammateRepoState>(`/v1/repos/${repoId}/teammate`);
+    set((s) => ({ teammateStateByRepo: { ...s.teammateStateByRepo, [repoId]: state } }));
+    return state;
+  },
+
+  refreshAssignments: async (repoId?, status?) => {
+    const capErr = await ensureTeammateCapabilities();
+    if (capErr) {
+      set({ apiError: capErr });
+      return;
+    }
+    const params = new URLSearchParams();
+    if (repoId) params.set('repoId', repoId);
+    if (status) params.set('status', status);
+    const qs = params.toString();
+    try {
+      const rows = await apiFetch<QaAssignment[]>(`/v1/assignments${qs ? `?${qs}` : ''}`);
+      set({ assignments: rows, apiError: null });
+    } catch (err) {
+      set({ apiError: teammateApiError(err) });
+    }
+  },
+
+  submitFixAssignment: async (repoId, testPath, opts = {}) => {
+    const created = await apiFetch<{ manifestId: string; assignmentId: string }>('/v1/assignments', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'fix_failure',
+        repoId,
+        testPath,
+        title: `Fix ${testPath}`,
+        autoApply: opts.autoApply ?? false,
+        maxHealAttempts: opts.maxHealAttempts ?? 3,
+      }),
+    });
+    await get().refreshAssignments();
+    await get().refreshManifests();
+    return created.manifestId;
+  },
+
+  submitStoryAssignment: async (repoId, targetUrl, expectedOutcomes, opts = {}) => {
+    const goal = opts.goal ?? `Automate: ${expectedOutcomes[0] ?? targetUrl}`;
+    const created = await apiFetch<{ manifestId: string; assignmentId: string }>('/v1/assignments', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'automate_story',
+        repoId,
+        targetUrl,
+        expectedOutcomes,
+        goal,
+        title: goal.slice(0, 120),
+        maxSteps: opts.maxSteps ?? 30,
+        autoApply: opts.autoApply ?? false,
+        maxHealAttempts: opts.maxHealAttempts ?? 3,
+      }),
+    });
+    await get().refreshAssignments();
+    await get().refreshManifests();
+    return created.manifestId;
+  },
+
+  submitRegressionAssignment: async (repoId, opts = {}) => {
+    const created = await apiFetch<{ manifestId: string; assignmentId: string }>('/v1/assignments', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'regression',
+        repoId,
+        title: 'Full regression QA',
+        stewardRuns: opts.stewardRuns ?? 3,
+        quarantineFlaky: opts.quarantineFlaky ?? true,
+        autoApply: opts.autoApply ?? false,
+      }),
+    });
+    await get().refreshAssignments();
+    await get().refreshManifests();
+    return created.manifestId;
+  },
+
+  cancelAssignment: async (id) => {
+    await apiFetch(`/v1/assignments/${id}/cancel`, { method: 'POST' });
+    await get().refreshAssignments();
+    get().showToast('Assignment cancelled.', 2200);
+  },
+
   refreshManifests: async () => {
     try {
       const rows = await apiFetch<ApiManifestRow[]>('/v1/tests?limit=500');
@@ -136,7 +261,7 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
   fetchRepoProfile: async (repoId) => apiFetch<RepoProfile>(`/v1/repos/${repoId}`),
 
   refreshAll: async () => {
-    const { refreshManifests, refreshCosts } = get();
+    const { refreshManifests, refreshCosts, refreshAssignments, refreshTeammateSummary } = get();
     try {
       const [repos, costs, feedbackStats, settings] = await Promise.all([
         apiFetch<RegisteredRepo[]>('/v1/repos'),
@@ -151,7 +276,7 @@ export const useConsoleStore = create<ConsoleState>((set, get) => ({
     } catch (err) {
       set({ apiError: (err as Error).message });
     }
-    await Promise.all([refreshManifests(), refreshCosts()]);
+    await Promise.all([refreshManifests(), refreshCosts(), refreshAssignments(), refreshTeammateSummary()]);
   },
 
   setFilter: (key, val) =>

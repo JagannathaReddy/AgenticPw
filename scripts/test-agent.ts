@@ -58,13 +58,23 @@ Usage:
   test-agent apply <manifestId>       # write a verified triage/improve patch onto the original file
   test-agent feedback <manifestId> --up|--down [--note "..."]   # rate a heal (apply records --up for you)
   test-agent feedback --stats                              # accept-rates per category / prompt version\n  test-agent feedback --promote <manifestId> [--write]     # turn a rated heal into an eval triple
+  test-agent assign --fix <testPath> [--repo <shortId|uuid>] [--include <glob> ...] [--auto-apply] [--max-cost N] [--max-heal-attempts N]
+  test-agent assign --regression [--repo <shortId|uuid>] [--runs N] [--no-quarantine] [--auto-apply] [--source ci|schedule] [--skip-if-active] [--no-wait]
+  test-agent assign --health [--repo <shortId|uuid>] [--runs N] [--source schedule] [--skip-if-active]
+  test-agent assign --url <url> --outcome <text> [--outcome ...] [--goal "..."] [--repo <shortId|uuid>] [--max-steps N] [--auto-apply] [--max-cost N]
+  test-agent story --url <url> --outcome <text> [--outcome ...] [--goal "..."] [--repo <shortId|uuid>]   # alias for automate_story
+  test-agent qa [--repo <shortId|uuid>] [--runs N] [--no-quarantine] [--auto-apply]   # alias for assign --regression
+  test-agent inbox [--repo <shortId|uuid>] [--status active|needs_you|done|escalated]
+  test-agent assignment <assignmentId|manifestId>
+  test-agent cancel <assignmentId|manifestId>
   test-agent get <manifestId>
   test-agent list
 
   test-agent init <local-path> [--name <name>]
   test-agent repos
+  test-agent auth-bootstrap --repo <shortId|uuid>   # run Playwright auth setup projects
 
-  test-agent doctor
+  test-agent doctor [--repo <shortId|uuid>]   # env checks; --repo adds loop readiness
   test-agent cost [--since 24h|7d] [--repo <shortId>]
 
 Environment:
@@ -680,6 +690,35 @@ async function initCommand(argv: string[]): Promise<void> {
   await watchManifest(submitted.manifestId);
 }
 
+async function authBootstrapCommand(argv: string[]): Promise<void> {
+  let repoRef: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--help' || a === '-h') {
+      process.stdout.write('test-agent auth-bootstrap --repo <shortId|uuid>\n');
+      return;
+    }
+  }
+  if (!repoRef) {
+    process.stderr.write('--repo is required for auth-bootstrap\n');
+    process.exit(2);
+  }
+
+  const repoId = await resolveRepoOption(repoRef);
+  process.stdout.write(`Running auth bootstrap…\n`);
+  process.stdout.write(`  repoId: ${repoId}\n\n`);
+
+  const submitted = await apiCall<{ manifestId: string; correlationId: string }>(
+    `/v1/repos/${repoId}/auth-bootstrap`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+  );
+  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+
+  await watchManifest(submitted.manifestId);
+}
+
 interface HealArgs {
   testPath: string;
   pageObjectPath?: string;
@@ -1269,6 +1308,298 @@ async function quarantineCommand(argv: string[]): Promise<void> {
   });
 }
 
+async function submitAssignmentRequest(
+  body: Record<string, unknown>,
+): Promise<{ manifestId: string; assignmentId: string; correlationId: string } | null> {
+  const url = `${API_BASE}/v1/assignments`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    process.stderr.write(`Cannot reach ${API_BASE} — is the API running? Try: npm run dev\n`);
+    process.exit(1);
+  }
+  const text = await res.text();
+  let data: Record<string, unknown> = {};
+  try {
+    data = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    /* non-json */
+  }
+  if (res.status === 409 && data.skipped) {
+    process.stdout.write(
+      `Skipped — active ${String(body.type)} assignment (${String(data.assignmentId ?? data.manifestId)})\n`,
+    );
+    return null;
+  }
+  if (!res.ok) {
+    process.stderr.write(`API ${res.status}: ${text.slice(0, 500)}\n`);
+    process.exit(1);
+  }
+  process.stdout.write(`  assignmentId: ${String(data.assignmentId)}\n`);
+  process.stdout.write(`  manifestId:    ${String(data.manifestId)}\n`);
+  process.stdout.write(`  correlationId: ${String(data.correlationId)}\n\n`);
+  return {
+    manifestId: String(data.manifestId),
+    assignmentId: String(data.assignmentId),
+    correlationId: String(data.correlationId),
+  };
+}
+
+async function assignCommand(argv: string[]): Promise<void> {
+  let testPath = '';
+  let targetUrl = '';
+  let goal: string | undefined;
+  let repoRef: string | undefined;
+  let title: string | undefined;
+  let autoApply = false;
+  let maxCost: number | undefined;
+  let maxHealAttempts: number | undefined;
+  let maxSteps: number | undefined;
+  const includeGlobs: string[] = [];
+  const expectedOutcomes: string[] = [];
+  let fixMode = false;
+  let storyMode = false;
+  let regressionMode = false;
+  let healthMode = false;
+  let stewardRuns: number | undefined;
+  let quarantineFlaky = true;
+  let source: 'human' | 'ci' | 'schedule' | 'api' | undefined;
+  let skipIfActive = false;
+  let noWait = false;
+
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--fix') {
+      fixMode = true;
+      testPath = argv[++i] ?? '';
+    } else if (a === '--regression') {
+      regressionMode = true;
+    } else if (a === '--health') {
+      healthMode = true;
+    } else if (a === '--url') {
+      storyMode = true;
+      targetUrl = argv[++i] ?? '';
+    } else if (a === '--outcome') expectedOutcomes.push(argv[++i] ?? '');
+    else if (a === '--goal') goal = argv[++i];
+    else if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--title') title = argv[++i];
+    else if (a === '--include') includeGlobs.push(argv[++i] ?? '');
+    else if (a === '--max-steps') maxSteps = Number(argv[++i]);
+    else if (a === '--auto-apply') autoApply = true;
+    else if (a === '--max-cost') maxCost = Number(argv[++i]);
+    else if (a === '--max-heal-attempts') maxHealAttempts = Number(argv[++i]);
+    else if (a === '--runs') stewardRuns = Number(argv[++i]);
+    else if (a === '--no-quarantine') quarantineFlaky = false;
+    else if (a === '--source') source = argv[++i] as typeof source;
+    else if (a === '--skip-if-active') skipIfActive = true;
+    else if (a === '--no-wait') noWait = true;
+    else if (a === '--help' || a === '-h') usage();
+    else if (a.startsWith('-')) {
+      process.stderr.write(`Unknown flag: ${a}\n`);
+      usage();
+    } else if (!fixMode && !storyMode && !testPath && !targetUrl) {
+      testPath = a;
+      fixMode = true;
+    } else {
+      process.stderr.write(`Unexpected argument: ${a}\n`);
+      usage();
+    }
+  }
+
+  if (regressionMode) {
+    const repoId = await resolveRepoOption(repoRef);
+    if (!repoId) {
+      process.stderr.write(`--repo is required for teammate assignments\n`);
+      process.exit(2);
+    }
+
+    process.stdout.write(`Assigning full regression QA to teammate…\n`);
+    process.stdout.write(`  steward runs: ${stewardRuns ?? 3}\n\n`);
+
+    const submitted = await submitAssignmentRequest({
+      type: 'regression',
+      repoId,
+      title: title ?? 'Full regression QA',
+      stewardRuns: stewardRuns ?? 3,
+      quarantineFlaky,
+      ...(autoApply ? { autoApply: true } : {}),
+      ...(maxCost !== undefined ? { maxCostUSD: maxCost } : {}),
+      ...(source ? { source } : {}),
+      ...(skipIfActive ? { skipIfActive: true } : {}),
+    });
+    if (submitted && !noWait) await watchManifest(submitted.manifestId);
+    return;
+  }
+
+  if (healthMode) {
+    const repoId = await resolveRepoOption(repoRef);
+    if (!repoId) {
+      process.stderr.write(`--repo is required for teammate assignments\n`);
+      process.exit(2);
+    }
+
+    process.stdout.write(`Assigning health check to teammate…\n`);
+    process.stdout.write(`  steward runs: ${stewardRuns ?? 3}\n\n`);
+
+    const submitted = await submitAssignmentRequest({
+      type: 'health_check',
+      repoId,
+      title: title ?? 'Suite health check',
+      stewardRuns: stewardRuns ?? 3,
+      ...(source ? { source } : {}),
+      ...(skipIfActive ? { skipIfActive: true } : {}),
+    });
+    if (submitted && !noWait) await watchManifest(submitted.manifestId);
+    return;
+  }
+
+  if (storyMode || targetUrl || expectedOutcomes.length > 0) {
+    if (!targetUrl) {
+      process.stderr.write(`assign story mode requires --url\n`);
+      usage();
+    }
+    if (expectedOutcomes.length === 0) {
+      process.stderr.write(`assign story mode requires at least one --outcome\n`);
+      usage();
+    }
+    const repoId = await resolveRepoOption(repoRef);
+    if (!repoId) {
+      process.stderr.write(`--repo is required for teammate assignments\n`);
+      process.exit(2);
+    }
+
+    const storyGoal = goal ?? `Automate: ${expectedOutcomes[0]}`;
+    process.stdout.write(`Assigning user story to teammate…\n`);
+    process.stdout.write(`  url: ${targetUrl}\n`);
+    process.stdout.write(`  outcomes: ${expectedOutcomes.join('; ')}\n\n`);
+
+    const submitted = await apiCall<{
+      manifestId: string;
+      assignmentId: string;
+      correlationId: string;
+    }>('/v1/assignments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'automate_story',
+        repoId,
+        targetUrl,
+        expectedOutcomes,
+        goal: storyGoal,
+        title: title ?? storyGoal.slice(0, 120),
+        ...(maxSteps !== undefined ? { maxSteps } : {}),
+        ...(autoApply ? { autoApply: true } : {}),
+        ...(maxCost !== undefined ? { maxCostUSD: maxCost } : {}),
+        ...(maxHealAttempts !== undefined ? { maxHealAttempts } : {}),
+      }),
+    });
+
+    process.stdout.write(`  assignmentId: ${submitted.assignmentId}\n`);
+    process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+    process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+    await watchManifest(submitted.manifestId);
+    return;
+  }
+
+  if (!testPath) {
+    process.stderr.write(`assign requires --fix, --regression, --health, or --url with --outcome\n`);
+    usage();
+  }
+
+  const repoId = await resolveRepoOption(repoRef);
+  if (!repoId) {
+    process.stderr.write(`--repo is required for teammate assignments\n`);
+    process.exit(2);
+  }
+
+  process.stdout.write(`Assigning fix to teammate…\n`);
+  process.stdout.write(`  test: ${testPath}\n\n`);
+
+  const submitted = await submitAssignmentRequest({
+    type: 'fix_failure',
+    repoId,
+    testPath,
+    title: title ?? `Fix ${testPath}`,
+    ...(includeGlobs.length > 0 ? { includeGlobs } : {}),
+    ...(autoApply ? { autoApply: true } : {}),
+    ...(maxCost !== undefined ? { maxCostUSD: maxCost } : {}),
+    ...(maxHealAttempts !== undefined ? { maxHealAttempts } : {}),
+    ...(source ? { source } : {}),
+    ...(skipIfActive ? { skipIfActive: true } : {}),
+  });
+  if (submitted && !noWait) await watchManifest(submitted.manifestId);
+}
+
+async function inboxCommand(argv: string[]): Promise<void> {
+  let repoRef: string | undefined;
+  let status: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--repo') repoRef = argv[++i];
+    else if (a === '--status') status = argv[++i];
+    else if (a === '--help' || a === '-h') usage();
+    else {
+      process.stderr.write(`Unknown argument: ${a}\n`);
+      usage();
+    }
+  }
+  const params = new URLSearchParams();
+  if (repoRef) {
+    const resolved = await resolveRepoRef(repoRef);
+    params.set('repoId', resolved.id);
+  }
+  if (status) params.set('status', status);
+  const qs = params.toString();
+  const list = await apiCall<
+    Array<{
+      id: string;
+      manifest_id: string;
+      title: string;
+      status: string;
+      assignment_type: string;
+      manifest_status: string;
+      created_at: string;
+    }>
+  >(`/v1/assignments${qs ? `?${qs}` : ''}`);
+  if (list.length === 0) {
+    process.stdout.write('(no assignments)\n');
+    return;
+  }
+  for (const row of list) {
+    process.stdout.write(
+      `${row.id.slice(0, 8)}  ${row.status.padEnd(11)}  ${row.assignment_type.padEnd(14)}  ${row.title.slice(0, 60)}\n`,
+    );
+    process.stdout.write(`          manifest ${row.manifest_id.slice(0, 8)} · ${row.manifest_status}\n`);
+  }
+}
+
+async function assignmentCommand(argv: string[]): Promise<void> {
+  const id = argv[0];
+  if (!id) {
+    process.stderr.write(`assignment id required\n`);
+    usage();
+  }
+  const row = await apiCall<Record<string, unknown>>(`/v1/assignments/${id}`);
+  process.stdout.write(`${JSON.stringify(row, null, 2)}\n`);
+}
+
+async function cancelCommand(argv: string[]): Promise<void> {
+  const id = argv[0];
+  if (!id) {
+    process.stderr.write(`assignment id required\n`);
+    usage();
+  }
+  const res = await apiCall<{ manifestId: string; status: string }>(`/v1/assignments/${id}/cancel`, {
+    method: 'POST',
+  });
+  process.stdout.write(`Cancelled assignment → manifest ${res.manifestId.slice(0, 8)} (${res.status})\n`);
+}
+
 async function reposCommand(): Promise<void> {
   const list = await apiCall<
     Array<{ id: string; name: string; localPath: string; status: string; profileId?: string }>
@@ -1312,9 +1643,11 @@ async function main(): Promise<void> {
       return initCommand(rest);
     case 'repos':
       return reposCommand();
+    case 'auth-bootstrap':
+      return authBootstrapCommand(rest);
     case 'doctor': {
       const { runDoctor } = await import('./doctor.js');
-      const code = await runDoctor();
+      const code = await runDoctor(rest);
       process.exit(code);
     }
     case 'cost': {
@@ -1322,6 +1655,20 @@ async function main(): Promise<void> {
       const code = await runCost(rest);
       process.exit(code);
     }
+    case 'assign':
+      return assignCommand(rest);
+    case 'story':
+      return assignCommand(rest);
+    case 'qa':
+      return assignCommand(['--regression', ...rest]);
+    case 'health':
+      return assignCommand(['--health', ...rest]);
+    case 'inbox':
+      return inboxCommand(rest);
+    case 'assignment':
+      return assignmentCommand(rest);
+    case 'cancel':
+      return cancelCommand(rest);
     case undefined:
     case '--help':
     case '-h':

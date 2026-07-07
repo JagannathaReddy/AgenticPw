@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "dev": "bash ../../scripts/kill-stale-api.sh && tsx watch --env-file-if-exists=../../.env src/index.ts",
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "clean": "rm -rf dist"
   },

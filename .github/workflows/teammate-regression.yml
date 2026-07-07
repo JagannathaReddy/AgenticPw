@@ -1,0 +1,46 @@
+# Phase 5: weekly teammate regression — steward → batch heal → quarantine → verify.
+# Unified closed loop via POST /v1/assignments (source=schedule).
+
+name: teammate-regression
+
+on:
+  schedule:
+    - cron: '0 5 * * 1' # Mondays 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      steward-runs:
+        description: Baseline steward runs
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: teammate-regression
+  cancel-in-progress: false
+
+env:
+  HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Skip when no LLM key is configured
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::OPENAI_API_KEY secret not set — teammate regression skipped." && exit 0
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+
+      - name: Run teammate regression
+        if: env.HAS_KEY == 'true'
+        uses: ./.github/actions/teammate
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          assignment-type: regression
+          steward-runs: ${{ github.event.inputs.steward-runs || '3' }}
+          source: schedule
+          skip-if-active: 'true'
+          wait: 'true'

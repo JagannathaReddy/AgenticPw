@@ -25,6 +25,17 @@ const NAV_ITEMS: { key: string; label: string; href: string; icon: React.ReactNo
     ),
   },
   {
+    key: "teammate",
+    label: "Teammate",
+    href: "/teammate",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="8" r="4"></circle>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+      </svg>
+    ),
+  },
+  {
     key: "manifests",
     label: "Manifests",
     href: "/manifests",
@@ -108,6 +119,7 @@ export default function Sidebar() {
 
   const isActive = (key: string) => {
     if (key === "manifests") return pathname.startsWith("/manifests") || pathname.startsWith("/manifest/");
+    if (key === "teammate") return pathname.startsWith("/teammate");
     return pathname.startsWith(`/${key}`);
   };
 

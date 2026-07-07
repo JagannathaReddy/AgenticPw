@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ArtifactStore } from '../artifacts.js';
 import type { WorkerConfig } from '../config.js';
-import { runPlaywright } from './judge-runner.js';
+import { extractReporterErrors, runPlaywright } from './judge-runner.js';
 import { verifyOutcomes } from './verify-outcomes.js';
 
 export interface JudgeInput {
@@ -12,6 +12,11 @@ export interface JudgeInput {
   /** Relative to repo root */
   pageObjectPath: string;
   expectedOutcomes: string[];
+}
+
+export interface JudgeRepoContext {
+  repoRoot: string;
+  playwrightProject?: string;
 }
 
 export type JudgeFailureCategory =
@@ -46,11 +51,10 @@ export async function runJudge(
   input: JudgeInput,
   artifacts: ArtifactStore,
   config: WorkerConfig,
+  repoContext: JudgeRepoContext,
 ): Promise<JudgeOutput> {
-  const repoRoot = config.repoRoot;
+  const repoRoot = repoContext.repoRoot;
 
-  // Copy generated files from the artifact store into the repo tests/ tree
-  // so Playwright's testDir config picks them up.
   const specSrc = artifacts.getPath(`${input.manifestId}/${input.testPath}`);
   const pageSrc = artifacts.getPath(`${input.manifestId}/${input.pageObjectPath}`);
   const specDst = path.join(repoRoot, input.testPath);
@@ -65,7 +69,7 @@ export async function runJudge(
   const astCoverage = verifyOutcomes(specContent, input.expectedOutcomes);
 
   const run = await runPlaywright(repoRoot, input.testPath, config.testTimeoutMs, {
-    project: config.playwrightProject,
+    project: repoContext.playwrightProject,
   });
 
   await artifacts.put(
@@ -91,6 +95,22 @@ export async function runJudge(
     astCoverage.totalCount === 0 ? 1 : astCoverage.matchedCount / astCoverage.totalCount;
 
   const outputTail = run.output.slice(-3000);
+
+  const setupErrors = extractReporterErrors(run.json);
+  if (setupErrors.length > 0 && run.exitCode !== 0) {
+    return {
+      passed: false,
+      category: 'test_did_not_run',
+      exitCode: run.exitCode,
+      timedOut: run.timedOut,
+      durationMs: run.durationMs,
+      matchedOutcomes,
+      outcomeCoverageRatio,
+      outputTail,
+      reason: `Playwright setup failed: ${setupErrors.join(' · ')}`,
+      tracePath: run.tracePath,
+    };
+  }
 
   if (run.timedOut) {
     return {

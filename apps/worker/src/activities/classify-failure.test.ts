@@ -2,6 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyFailure } from './classify-failure.js';
 
+test('storageState missing → env_setup_required, refuse-to-heal', () => {
+  const c = classifyFailure(
+    "Error: ENOENT: no such file or directory, open '.auth/user.json'",
+  );
+  assert.equal(c.category, 'env_setup_required');
+  assert.equal(c.isSafeToHeal, false);
+});
+
 test('ECONNREFUSED → infra, refuse-to-heal', () => {
   const c = classifyFailure('page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/');
   assert.equal(c.category, 'infra');
