@@ -16,6 +16,7 @@ import type { BatchManifestRow } from './workflows/batch.js';
 import { runBatch } from './workflows/batch.js';
 import { runQuarantine, type QuarantineManifestRow } from './workflows/quarantine.js';
 import { runTeammate, type TeammateManifestRow } from './workflows/teammate.js';
+import { runAnalyze, type AnalyzeManifestRow } from './workflows/analyze.js';
 import {
   runAuthBootstrapWorkflow,
   type AuthBootstrapManifestRow,
@@ -25,7 +26,7 @@ const RESET_STALE_ON_BOOT = process.env.WORKER_RESET_STALE !== 'false';
 
 interface ClaimedManifest {
   id: string;
-  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator' | 'quarantiner' | 'teammate';
+  role: 'coverage' | 'onboarding' | 'triage' | 'improver' | 'steward' | 'orchestrator' | 'quarantiner' | 'teammate' | 'analyzer';
   org_id: string;
   workspace_id: string;
   goal: unknown;
@@ -38,7 +39,7 @@ async function claimNext(pool: ReturnType<typeof createPool>): Promise<ClaimedMa
     const { rows } = await client.query<ClaimedManifest>(
       `WITH picked AS (
          SELECT id FROM manifests
-          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator', 'quarantiner', 'teammate')
+          WHERE status = 'pending' AND role IN ('coverage', 'onboarding', 'triage', 'improver', 'steward', 'orchestrator', 'quarantiner', 'teammate', 'analyzer')
           ORDER BY created_at
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -159,6 +160,12 @@ async function main(): Promise<void> {
         });
       } else if (claim.role === 'teammate') {
         result = await runTeammate(claim as unknown as TeammateManifestRow, {
+          pool,
+          artifacts,
+          config,
+        });
+      } else if (claim.role === 'analyzer') {
+        result = await runAnalyze(claim as unknown as AnalyzeManifestRow, {
           pool,
           artifacts,
           config,

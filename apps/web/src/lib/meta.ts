@@ -41,6 +41,7 @@ export const FLOW_META: Record<Flow, Meta> = {
   steward: { label: 'Steward', fg: '#16A34A', bg: '#DCFCE7' },
   quarantine: { label: 'Quarantine', fg: '#0E7C7B', bg: '#CCFBF1' },
   onboard: { label: 'Onboard', fg: '#6B7280', bg: '#EEF0F2' },
+  analyze: { label: 'Analyze', fg: '#7C3AED', bg: '#EDE9FE' },
 };
 
 export const HEALTH_META: Record<'green' | 'amber' | 'red', Meta & { label: string }> = {

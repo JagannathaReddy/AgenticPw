@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS manifests (
 
   role                TEXT NOT NULL
                         CHECK (role IN (
-                          'orchestrator', 'coverage', 'triage', 'steward',
+                          'orchestrator', 'coverage', 'triage', 'steward', 'teammate', 'analyzer',
+                          'onboarding', 'improver', 'quarantiner',
                           'explorer', 'generator', 'healer', 'reviewer', 'judge'
                         )),
   status              TEXT NOT NULL DEFAULT 'pending'

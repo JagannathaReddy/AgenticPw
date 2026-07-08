@@ -7,7 +7,7 @@ ALTER TABLE manifests DROP CONSTRAINT IF EXISTS manifests_role_check;
 
 ALTER TABLE manifests ADD CONSTRAINT manifests_role_check CHECK (
   role IN (
-    'orchestrator', 'coverage', 'triage', 'steward', 'teammate',
+    'orchestrator', 'coverage', 'triage', 'steward', 'teammate', 'analyzer',
     'onboarding', 'improver', 'quarantiner',
     'explorer', 'generator', 'healer', 'reviewer', 'judge'
   )

@@ -51,6 +51,7 @@ Usage:
   test-agent heal <testPath> [--repo <shortId|uuid>] [--page-object <path>] [--include <glob> ...] [--format github] [--auto-apply] [--max-cost N]
   test-agent improve <testPath> [--repo <shortId|uuid>] [--page-object <path>]
   test-agent steward [--repo <shortId|uuid>] [--runs N] [--format github]   # suite health report (default 3 runs)
+  test-agent analyze [--since 7d|168h] [--role triage] [--min-cluster N]     # pattern-detect over recent rejected manifests
   test-agent batch '<glob>' [--repo <shortId|uuid>] [--max-cost N] [--format github]
   test-agent batch --from-steward <manifestId>             # heal every candidate from a report
   test-agent quarantine --from-steward <manifestId> [--auto-apply]   # wrap flagged flaky tests in test.fixme
@@ -827,6 +828,84 @@ async function improveCommand(argv: string[]): Promise<void> {
     ...(args.pageObjectPath ? { pageObjectPath: args.pageObjectPath } : {}),
     ...(repoId ? { repoId } : {}),
   });
+}
+
+/**
+ * L4 Sprint A.1 — pattern-detect over recent rejected manifests.
+ * Runs a read-only analyzer manifest, prints the top clusters, and points
+ * the user at the Markdown report artifact.
+ */
+async function analyzeCommand(argv: string[]): Promise<void> {
+  let sinceHours = 168;
+  let roleFilter: string | undefined;
+  let minClusterSize: number | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--since') {
+      const v = argv[++i] ?? '';
+      const m = v.match(/^(\d+)([hd])$/);
+      if (!m) {
+        process.stderr.write(`--since expects <number>h or <number>d (got "${v}")\n`);
+        process.exit(2);
+      }
+      sinceHours = Number(m[1]) * (m[2] === 'd' ? 24 : 1);
+    } else if (a === '--role') {
+      roleFilter = argv[++i];
+    } else if (a === '--min-cluster') {
+      minClusterSize = Number(argv[++i]);
+    } else if (a === '--help' || a === '-h') {
+      usage();
+    } else {
+      process.stderr.write(`Unknown argument: ${a}\n`);
+      usage();
+    }
+  }
+
+  process.stdout.write(
+    `Submitting analyzer manifest (last ${sinceHours}h, role=${roleFilter ?? 'all'})…\n\n`,
+  );
+
+  const submitted = await apiCall<{ manifestId: string; correlationId: string }>('/v1/analyses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sinceHours,
+      ...(roleFilter ? { roleFilter } : {}),
+      ...(minClusterSize !== undefined ? { minClusterSize } : {}),
+    }),
+  });
+  process.stdout.write(`  manifestId:    ${submitted.manifestId}\n`);
+  process.stdout.write(`  correlationId: ${submitted.correlationId}\n\n`);
+  await watchManifest(submitted.manifestId);
+  const final = await apiCall<AnyManifest>(`/v1/tests/${submitted.manifestId}`);
+  if (final.status !== 'succeeded') return;
+  const r = final.result ?? {};
+  const clusters = (r.clusters ?? []) as Array<{
+    category: string;
+    signature: string;
+    count: number;
+    totalCostUSD: number;
+    sampleIds: string[];
+  }>;
+
+  process.stdout.write(
+    `\nRejected manifests analyzed: ${r.rejectedTotal ?? 0} · ` +
+      `Clusters found: ${r.clusterCount ?? 0} · ` +
+      `Wasted LLM spend: $${Number(r.totalWastedUSD ?? 0).toFixed(4)}\n\n`,
+  );
+  if (clusters.length === 0) {
+    process.stdout.write('No clusters at or above the sample threshold.\n');
+    return;
+  }
+  clusters.slice(0, 5).forEach((c, i) => {
+    process.stdout.write(
+      `${i + 1}. ${c.category} — ${c.count} manifests · $${c.totalCostUSD.toFixed(4)} wasted\n` +
+        `   ${c.signature}\n` +
+        `   samples: ${c.sampleIds.map((s) => s.slice(0, 8)).join(', ')}\n\n`,
+    );
+  });
+  const path = (r.reportPath ?? '') as string;
+  if (path) process.stdout.write(`Full report: ${path}\n`);
 }
 
 async function stewardCommand(argv: string[]): Promise<void> {
@@ -1631,6 +1710,8 @@ async function main(): Promise<void> {
       return improveCommand(rest);
     case 'steward':
       return stewardCommand(rest);
+    case 'analyze':
+      return analyzeCommand(rest);
     case 'batch':
       return batchCommand(rest);
     case 'quarantine':

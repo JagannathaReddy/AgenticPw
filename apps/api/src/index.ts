@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { devAuthHook } from './auth.js';
+import { registerAnalysesRoutes } from './routes/analyses.js';
 import { registerAssignmentsRoutes, registerWebhookRoutes } from './routes/assignments.js';
 import { registerBatchesRoutes } from './routes/batches.js';
 import { registerConsoleDataRoutes } from './routes/console-data.js';
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
   registerBatchesRoutes(app, db);
   registerFeedbackRoutes(app, db);
   registerQuarantinesRoutes(app, db);
+  registerAnalysesRoutes(app, db);
   registerAssignmentsRoutes(app, db);
   registerWebhookRoutes(app, db);
   registerTeammateStateRoutes(app, db);

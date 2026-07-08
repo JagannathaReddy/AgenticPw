@@ -1,4 +1,4 @@
-export type Flow = 'add' | 'heal' | 'improve' | 'batch' | 'steward' | 'quarantine' | 'onboard';
+export type Flow = 'add' | 'heal' | 'improve' | 'batch' | 'steward' | 'quarantine' | 'onboard' | 'analyze';
 
 export type Status = 'created' | 'running' | 'accepted' | 'rejected' | 'applied';
 

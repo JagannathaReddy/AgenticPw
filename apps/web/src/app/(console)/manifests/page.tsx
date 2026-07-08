@@ -7,7 +7,7 @@ import { ACCENT_COLOR } from "@/lib/meta";
 import type { Filters } from "@/lib/types";
 
 const STATUSES: Filters["status"][] = ["all", "created", "running", "accepted", "applied", "rejected"];
-const FLOWS: Filters["flow"][] = ["all", "add", "heal", "improve", "batch", "steward", "quarantine", "onboard"];
+const FLOWS: Filters["flow"][] = ["all", "add", "heal", "improve", "batch", "steward", "quarantine", "onboard", "analyze"];
 const STATUS_LABEL: Record<string, string> = {
   all: "All",
   created: "Created",
@@ -25,6 +25,7 @@ const FLOW_LABEL: Record<string, string> = {
   steward: "Steward",
   quarantine: "Quarantine",
   onboard: "Onboard",
+  analyze: "Analyze",
 };
 
 function optClass(active: boolean) {

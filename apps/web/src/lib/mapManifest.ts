@@ -40,6 +40,8 @@ export function roleToFlow(role: string, goalKind?: string): Flow {
       return 'steward';
     case 'onboarding':
       return 'onboard';
+    case 'analyzer':
+      return 'analyze';
     default:
       return 'heal';
   }
